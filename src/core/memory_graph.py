@@ -83,6 +83,7 @@ class MemoryGraph:
             node.update_access()
             return node
         else:
+            print('get_node returned None')
             return None
             
     def remove_node(self, node_id: str) -> bool:
