@@ -28,9 +28,18 @@ export const MemoryVisualizationScreen: React.FC = () => {
 
   // Update graph size based on details panel visibility
   useEffect(() => {
+    // Use more precise height calculations
+    const headerHeight = 72; // Header with padding
+    const statsHeight = 84; // Stats bar with padding
+    const tabBarHeight = 60; // Bottom tab bar
+    const detailsHeight = showDetails ? screenHeight * 0.5 : 0; // Match maxHeight in detailsPanel style
+    
+    const totalReservedHeight = headerHeight + statsHeight + tabBarHeight + detailsHeight;
+    const availableHeight = screenHeight - totalReservedHeight;
+    
     setGraphSize({
       width: screenWidth,
-      height: showDetails ? screenHeight * 0.4 : screenHeight * 0.6,
+      height: Math.max(200, availableHeight),
     });
   }, [showDetails]);
 
@@ -38,8 +47,7 @@ export const MemoryVisualizationScreen: React.FC = () => {
 
   const handleNodeSelect = (nodeId: string) => {
     setShowDetails(true);
-    // Simulate accessing the selected node
-    simulateMemoryAccess(nodeId, 'read');
+    // Don't simulate AI access for user clicks - only AI thinking triggers reads
   };
 
   const handleSimulateThinking = () => {
@@ -115,9 +123,18 @@ export const MemoryVisualizationScreen: React.FC = () => {
           height={graphSize.height}
           onNodeSelect={handleNodeSelect}
         />
+        
+        {/* Instruction overlay when no details shown */}
+        {!showDetails && !selectedNode && (
+          <View style={styles.instructionOverlay}>
+            <Text style={styles.instructionText}>
+              Tap a node to view details
+            </Text>
+          </View>
+        )}
       </View>
 
-      {/* Details Panel */}
+      {/* Details Panel - Only rendered when visible */}
       {showDetails && (
         <View style={styles.detailsPanel}>
           <View style={styles.detailsHeader}>
@@ -228,6 +245,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
+    zIndex: 10,
+    position: 'relative',
   },
   title: {
     fontSize: 20,
@@ -259,6 +278,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
+    zIndex: 10,
+    position: 'relative',
   },
   stat: {
     alignItems: 'center',
@@ -275,6 +296,7 @@ const styles = StyleSheet.create({
   },
   visualizationContainer: {
     flex: 1,
+    zIndex: 1,
   },
   detailsPanel: {
     backgroundColor: '#FFFFFF',
@@ -382,5 +404,20 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingHorizontal: 24,
     lineHeight: 20,
+  },
+  instructionOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 12,
+    borderRadius: 8,
+  },
+  instructionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
