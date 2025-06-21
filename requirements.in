@@ -1,0 +1,6 @@
+numpy
+neo4j
+fastapi
+sentence-transformers
+pydantic
+pytest
