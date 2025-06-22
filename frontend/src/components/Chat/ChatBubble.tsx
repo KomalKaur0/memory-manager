@@ -27,7 +27,13 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onMemoryAccessP
                   key={`${access.node_id}-${index}`}
                   style={[
                     styles.memoryNode,
-                    { backgroundColor: getAccessTypeColor(access.access_type) }
+                    { 
+                      backgroundColor: getAccessTypeColor(access.access_type),
+                      shadowColor: getAccessTypeColor(access.access_type),
+                      shadowOpacity: 0.6,
+                      shadowRadius: 6,
+                      shadowOffset: { width: 0, height: 0 },
+                    }
                   ]}
                   onPress={() => onMemoryAccessPress?.(access.node_id)}
                 >
@@ -53,11 +59,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onMemoryAccessP
 
 const getAccessTypeColor = (accessType: string): string => {
   switch (accessType) {
-    case 'read': return '#4A90E2';
-    case 'write': return '#7ED321';
-    case 'strengthen': return '#F5A623';
-    case 'traverse': return '#BD10E0';
-    default: return '#9B9B9B';
+    case 'read': return '#87CEEB';     // Sky blue glow - matching node colors
+    case 'write': return '#98FB98';    // Pale green glow
+    case 'strengthen': return '#FFD700'; // Gold glow
+    case 'traverse': return '#DDA0DD';   // Plum glow
+    default: return '#E6E6FA';           // Lavender
   }
 };
 
@@ -132,7 +138,7 @@ const styles = StyleSheet.create({
   },
   memoryNodeText: {
     fontSize: 11,
-    color: '#FFFFFF',
+    color: '#000011',
     fontWeight: '600',
   },
 });

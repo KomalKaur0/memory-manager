@@ -87,16 +87,42 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   simulateThinkingWithMemoryAccess: async () => {
     const { setTyping, setMemoryVisualizationVisible, simulateAssistantResponse } = get();
     
+    // Import memory store dynamically to avoid circular dependency
+    const { useMemoryStore } = await import('./memoryStore');
+    const memoryStore = useMemoryStore.getState();
+    
+    // Clear any previous memory access states to avoid animation conflicts
+    memoryStore.clearRecentAccesses();
+    
     // Show thinking state and memory visualization
     setTyping(true);
     setMemoryVisualizationVisible(true);
+    memoryStore.setThinking(true);
     
-    // Simulate thinking time with memory access
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Simulate sequential memory access with realistic timing
+    const thinkingSequence = [
+      { nodeId: '1', accessType: 'read' as const, delay: 800 },
+      { nodeId: '2', accessType: 'traverse' as const, delay: 1200 },
+      { nodeId: '3', accessType: 'read' as const, delay: 600 },
+      { nodeId: '5', accessType: 'strengthen' as const, delay: 900 },
+      { nodeId: '4', accessType: 'read' as const, delay: 700 },
+    ];
+    
+    // Execute memory access sequence
+    let totalDelay = 0;
+    for (const step of thinkingSequence) {
+      await new Promise(resolve => setTimeout(resolve, step.delay));
+      memoryStore.simulateMemoryAccess(step.nodeId, step.accessType);
+      totalDelay += step.delay;
+    }
+    
+    // Add a final pause for realism
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     // Add response and hide visualization
     simulateAssistantResponse();
     setTyping(false);
     setMemoryVisualizationVisible(false);
+    memoryStore.setThinking(false);
   }
 }));

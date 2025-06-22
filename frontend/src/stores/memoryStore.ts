@@ -13,6 +13,7 @@ interface MemoryStore extends MemoryGraphState {
   // Mock data methods
   generateMockData: () => void;
   simulateMemoryAccess: (nodeId: string, accessType: MemoryAccessEvent['access_type']) => void;
+  clearRecentAccesses: () => void;
 }
 
 // Generate mock embeddings (normally would come from embedding model)
@@ -224,5 +225,8 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
         }
       }
     }));
-  }
+  },
+
+  clearRecentAccesses: () =>
+    set({ recentAccesses: [] })
 }));

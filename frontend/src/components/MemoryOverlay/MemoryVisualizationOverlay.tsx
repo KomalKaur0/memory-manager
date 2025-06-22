@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Modal, Pressable, Text, Dimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Feather } from '@expo/vector-icons';
-import { MemoryGraph3D } from '../Memory3D/MemoryGraph3D';
+import { MemoryGraphOverlay } from '../Memory3D/MemoryGraphOverlay';
 import { useChatStore } from '../../stores/chatStore';
+import { useMemoryStore } from '../../stores/memoryStore';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -17,6 +18,28 @@ export const MemoryVisualizationOverlay: React.FC<MemoryVisualizationOverlayProp
   onClose,
 }) => {
   const { isTyping } = useChatStore();
+  const { isThinking, recentAccesses } = useMemoryStore();
+  const [pulseAnimation, setPulseAnimation] = useState(false);
+
+  // Pulsing animation for thinking indicator
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isThinking || isTyping) {
+      interval = setInterval(() => {
+        setPulseAnimation(prev => !prev);
+      }, 800);
+    } else {
+      setPulseAnimation(false);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isThinking, isTyping]);
+
+  // Get recent access count for display
+  const recentAccessCount = recentAccesses.filter(
+    access => Date.now() - access.timestamp < 10000 // Last 10 seconds
+  ).length;
 
   return (
     <Modal
@@ -31,10 +54,24 @@ export const MemoryVisualizationOverlay: React.FC<MemoryVisualizationOverlayProp
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <View style={styles.thinkingIndicator}>
-                <View style={[styles.thinkingDot, { opacity: isTyping ? 1 : 0.3 }]} />
-                <Text style={styles.thinkingText}>
-                  {isTyping ? 'AI is thinking...' : 'Memory Access'}
-                </Text>
+                <View style={[
+                  styles.thinkingDot, 
+                  { 
+                    opacity: (isTyping || isThinking) ? (pulseAnimation ? 1 : 0.5) : 0.3,
+                    backgroundColor: (isTyping || isThinking) ? '#FFD700' : '#007AFF',
+                    transform: [{ scale: (isTyping || isThinking) && pulseAnimation ? 1.2 : 1 }]
+                  }
+                ]} />
+                <View style={styles.thinkingTextContainer}>
+                  <Text style={styles.thinkingText}>
+                    {(isTyping || isThinking) ? 'AI is thinking...' : 'Memory Access'}
+                  </Text>
+                  {recentAccessCount > 0 && (
+                    <Text style={styles.accessCountText}>
+                      {recentAccessCount} recent access{recentAccessCount !== 1 ? 'es' : ''}
+                    </Text>
+                  )}
+                </View>
               </View>
             </View>
             
@@ -45,7 +82,7 @@ export const MemoryVisualizationOverlay: React.FC<MemoryVisualizationOverlayProp
 
           {/* 3D Visualization */}
           <View style={styles.visualizationContainer}>
-            <MemoryGraph3D
+            <MemoryGraphOverlay
               width={screenWidth - 40}
               height={screenHeight * 0.7}
             />
@@ -54,9 +91,9 @@ export const MemoryVisualizationOverlay: React.FC<MemoryVisualizationOverlayProp
           {/* Info Panel */}
           <View style={styles.infoPanel}>
             <Text style={styles.infoText}>
-              {isTyping 
-                ? 'Watch as the AI accesses different memories to formulate a response'
-                : 'Memory access visualization - nodes light up when accessed'
+              {(isTyping || isThinking)
+                ? 'Watch as the AI accesses different memories to formulate a response. Nodes glow brighter when accessed.'
+                : 'Memory access visualization - nodes light up when accessed. Send a message to see the AI think!'
               }
             </Text>
           </View>
@@ -101,10 +138,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     marginRight: 8,
   },
+  thinkingTextContainer: {
+    flex: 1,
+  },
   thinkingText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '500',
+  },
+  accessCountText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 2,
   },
   closeButton: {
     padding: 8,

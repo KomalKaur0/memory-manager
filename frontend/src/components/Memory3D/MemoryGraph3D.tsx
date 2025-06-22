@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback, startTransition } from 'react';
-import { View, StyleSheet, Text, Dimensions, Pressable } from 'react-native';
+import { View, StyleSheet, Text, Dimensions, Pressable, Animated } from 'react-native';
 import { PanGestureHandler, PinchGestureHandler, State } from 'react-native-gesture-handler';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Line, ClipPath, Rect, G } from 'react-native-svg';
@@ -12,6 +12,81 @@ interface MemoryGraph3DProps {
   onNodeSelect?: (nodeId: string) => void;
 }
 
+// Simple Memory Node Component - using basic styling to avoid animation conflicts
+const SimpleMemoryNode: React.FC<{
+  nodeData: any;
+  onPress: () => void;
+}> = ({ nodeData, onPress }) => {
+  const halfSize = nodeData.size / 2;
+
+  return (
+    <Pressable
+      style={[
+        styles.memoryNode,
+        {
+          position: 'absolute',
+          left: nodeData.position.x - halfSize,
+          top: nodeData.position.y - halfSize,
+          width: nodeData.size,
+          height: nodeData.size,
+          borderRadius: halfSize,
+          backgroundColor: nodeData.color,
+          borderColor: nodeData.color,
+          borderWidth: 0,
+          opacity: nodeData.glowIntensity,
+          shadowColor: nodeData.color,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: nodeData.glowIntensity * 0.8,
+          shadowRadius: nodeData.size * nodeData.glowIntensity * 0.5,
+          transform: [
+            { scale: nodeData.isSelected ? 1.3 : 1 },
+          ],
+        },
+      ]}
+      onPress={onPress}
+    >
+      {/* Access type indicator - glowing ring for active nodes */}
+      {nodeData.isRecentlyAccessed && nodeData.accessType && (
+        <View
+          style={[
+            styles.accessIndicator,
+            {
+              backgroundColor: nodeData.color,
+              shadowColor: nodeData.color,
+              shadowOpacity: 0.8,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 0 },
+            }
+          ]}
+        >
+          <Text style={styles.accessText}>
+            {nodeData.accessType.charAt(0).toUpperCase()}
+          </Text>
+        </View>
+      )}
+      
+      {/* Pulsing glow ring for recently accessed nodes */}
+      {nodeData.isRecentlyAccessed && (
+        <View
+          style={[
+            styles.pulseRing,
+            {
+              width: nodeData.size * 1.5,
+              height: nodeData.size * 1.5,
+              borderRadius: nodeData.size * 0.75,
+              borderColor: nodeData.color,
+              left: -(nodeData.size * 0.25),
+              top: -(nodeData.size * 0.25),
+              opacity: nodeData.glowIntensity,
+            }
+          ]}
+        />
+      )}
+    </Pressable>
+  );
+};
+
+
 // 3D Vector Space Memory Visualization with proper viewport clipping
 export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
   width = 400,
@@ -22,6 +97,7 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
     nodes,
     selectedNode,
     recentAccesses,
+    isThinking,
     selectNode,
   } = useMemoryStore();
 
@@ -202,6 +278,9 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
 
   // Reset camera to show all nodes
   const resetCamera = () => {
+    // Don't reset camera during thinking to prevent jumping
+    if (isThinking) return;
+    
     const positions = Object.values(nodePositions);
     if (positions.length === 0) return;
     
@@ -225,6 +304,9 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
 
   // Handle pan gestures for rotation - using delta approach
   const onPanGestureEvent = (event: any) => {
+    // Don't allow camera movement during thinking to prevent jumping
+    if (isThinking) return;
+    
     const { translationX, translationY } = event.nativeEvent;
     
     // Calculate frame-to-frame delta
@@ -287,6 +369,9 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
 
   // Handle pinch gestures for zoom - delta based (no acceleration)
   const onPinchGestureEvent = (event: any) => {
+    // Don't allow zoom during thinking to prevent jumping
+    if (isThinking) return;
+    
     const { scale, state } = event.nativeEvent;
     
     if (state === State.BEGAN) {
@@ -354,6 +439,9 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
   const animationRef = useRef<number>();
   
   useEffect(() => {
+    // Don't animate camera during thinking to prevent jumping
+    if (isThinking) return;
+    
     if (selectedNode && nodePositions[selectedNode]) {
       // Cancel any existing animation
       if (animationRef.current) {
@@ -395,11 +483,13 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [selectedNode, nodePositions]);
+  }, [selectedNode, nodePositions, isThinking]);
 
   // Auto-fit camera to show all nodes on initial load
   useEffect(() => {
     if (Object.keys(nodePositions).length === 0) return;
+    // Don't auto-fit during thinking to prevent jumping
+    if (isThinking) return;
     
     // Calculate bounding box of all nodes
     let minX = Infinity, maxX = -Infinity;
@@ -439,7 +529,7 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
         distance: Math.max(200, Math.min(800, distance)),
       },
     }));
-  }, [nodePositions]);
+  }, [nodePositions, isThinking]);
 
   // Track recent memory accesses for visualization
   const recentAccessMap = useMemo(() => {
@@ -458,18 +548,25 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
     return map;
   }, [recentAccesses]);
 
-  // Determine node color based on state
+  // Determine node color based on state - star-like glow colors
   const getNodeColor = (node: MemoryNode, isRecentlyAccessed: boolean, accessType?: string) => {
     if (isRecentlyAccessed && accessType) {
       const colors = {
-        'read': '#4A90E2',
-        'write': '#7ED321',
-        'strengthen': '#F5A623',
-        'traverse': '#BD10E0',
+        'read': '#87CEEB',     // Sky blue glow
+        'write': '#98FB98',    // Pale green glow
+        'strengthen': '#FFD700', // Gold glow
+        'traverse': '#DDA0DD',   // Plum glow
       };
-      return colors[accessType] || '#FF6B6B';
+      return colors[accessType] || '#FFA07A'; // Light salmon
     }
-    return '#8A8A8A'; // Default gray
+    return '#E6E6FA'; // Lavender for dim default state
+  };
+
+  // Get glow intensity based on node state
+  const getGlowIntensity = (node: MemoryNode, isRecentlyAccessed: boolean, isSelected: boolean) => {
+    if (isSelected) return 1.0; // Full glow when selected
+    if (isRecentlyAccessed) return 0.8; // Bright glow when recently accessed
+    return 0.3; // Dim glow for inactive nodes
   };
 
   // Calculate node size based on importance
@@ -504,8 +601,10 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
       
       const recentAccess = recentAccessMap[nodeId];
       const isRecentlyAccessed = !!recentAccess;
+      const isSelected = selectedNode === nodeId;
       const color = getNodeColor(node, isRecentlyAccessed, recentAccess?.accessType);
       const size = getNodeSize(node, screenPos.scale);
+      const glowIntensity = getGlowIntensity(node, isRecentlyAccessed, isSelected);
       
       projected.push({
         nodeId,
@@ -516,9 +615,10 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
         isVisible: true,
         color,
         size,
-        isSelected: selectedNode === nodeId,
+        isSelected,
         isRecentlyAccessed,
         accessType: recentAccess?.accessType,
+        glowIntensity,
       });
     });
     
@@ -583,10 +683,21 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
         }
         
         const weight = connection.outbound_weight;
-        const color = weight > 0.7 ? '#FF6B6B' :
-                     weight > 0.5 ? '#FFA500' :
-                     weight > 0.3 ? '#4A90E2' : '#666666';
+        // Blue glow connections with intensity based on weight
+        const baseBlue = '#4A90E2';
+        const glowBlue = '#87CEEB';
+        const color = weight > 0.7 ? '#00BFFF' :  // Deep sky blue for strong connections
+                     weight > 0.5 ? '#4169E1' :  // Royal blue for medium connections  
+                     weight > 0.3 ? '#6495ED' :  // Cornflower blue for weak connections
+                     '#483D8B';                   // Dark slate blue for very weak connections
         
+        // Check if either node was recently accessed to boost connection glow
+        const startRecentAccess = recentAccessMap[nodeId];
+        const endRecentAccess = recentAccessMap[targetId];
+        const hasRecentAccess = startRecentAccess || endRecentAccess;
+        const baseGlowIntensity = Math.max(0.2, weight);
+        const boostedGlow = hasRecentAccess ? Math.min(1, baseGlowIntensity * 1.5) : baseGlowIntensity;
+
         connections.push({
           id: connectionId,
           x1,
@@ -597,6 +708,7 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
           color,
           depth: (startScreen.depth + endScreen.depth) / 2,
           isVisible: true,
+          glowIntensity: boostedGlow,
         });
       });
     });
@@ -646,18 +758,45 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
               
               {/* Render connections within clipped area */}
               <G clipPath="url(#viewportClip)">
-                {projectedConnections.map((connection) => (
-                  <Line
-                    key={connection.id}
-                    x1={connection.x1}
-                    y1={connection.y1}
-                    x2={connection.x2}
-                    y2={connection.y2}
-                    stroke={connection.color}
-                    strokeWidth={Math.max(1, connection.weight * 3)}
-                    strokeOpacity={connection.weight * 0.6}
-                  />
-                ))}
+                {projectedConnections.map((connection) => {
+                  const baseWidth = Math.max(1, connection.weight * 4);
+                  const baseOpacity = connection.glowIntensity * 0.8;
+                  
+                  return (
+                    <G key={connection.id}>
+                      {/* Outer glow layer */}
+                      <Line
+                        x1={connection.x1}
+                        y1={connection.y1}
+                        x2={connection.x2}
+                        y2={connection.y2}
+                        stroke={connection.color}
+                        strokeWidth={baseWidth * 3}
+                        strokeOpacity={baseOpacity * 0.2}
+                      />
+                      {/* Middle glow layer */}
+                      <Line
+                        x1={connection.x1}
+                        y1={connection.y1}
+                        x2={connection.x2}
+                        y2={connection.y2}
+                        stroke={connection.color}
+                        strokeWidth={baseWidth * 2}
+                        strokeOpacity={baseOpacity * 0.4}
+                      />
+                      {/* Inner core line */}
+                      <Line
+                        x1={connection.x1}
+                        y1={connection.y1}
+                        x2={connection.x2}
+                        y2={connection.y2}
+                        stroke={connection.color}
+                        strokeWidth={baseWidth}
+                        strokeOpacity={baseOpacity}
+                      />
+                    </G>
+                  );
+                })}
               </G>
             </Svg>
             
@@ -674,36 +813,11 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
               }
               
               return (
-                <Pressable
+                <SimpleMemoryNode
                   key={nodeData.nodeId}
-                  style={[
-                    styles.memoryNode,
-                    {
-                      left: nodeData.position.x - halfSize,
-                      top: nodeData.position.y - halfSize,
-                      width: nodeData.size,
-                      height: nodeData.size,
-                      borderRadius: halfSize,
-                      backgroundColor: nodeData.color,
-                      borderColor: nodeData.isSelected ? '#FFD700' : nodeData.color,
-                      borderWidth: nodeData.isSelected ? 3 : 1,
-                      opacity: Math.min(1, nodeData.scale * 0.8 + 0.2),
-                      transform: [
-                        { scale: nodeData.isSelected ? 1.1 : 1 },
-                      ],
-                    },
-                  ]}
+                  nodeData={nodeData}
                   onPress={() => handleNodePress(nodeData.nodeId)}
-                >
-                  {/* Access type indicator */}
-                  {nodeData.isRecentlyAccessed && nodeData.accessType && (
-                    <View style={styles.accessIndicator}>
-                      <Text style={styles.accessText}>
-                        {nodeData.accessType.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
-                </Pressable>
+                />
               );
             })}
             
@@ -780,15 +894,21 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: '#FF4444',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#000011',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   accessText: {
-    color: '#FFFFFF',
+    color: '#000011',
     fontSize: 8,
     fontWeight: 'bold',
+  },
+  pulseRing: {
+    position: 'absolute',
+    borderWidth: 2,
+    backgroundColor: 'transparent',
+    opacity: 0.6,
+    // Animation would be added here if supported
   },
 });
