@@ -7,6 +7,9 @@ from typing import AsyncGenerator
 import os
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -46,7 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     
     # Initialize embedding search with API key from .env
     embedding_config = get_embedding_config_from_env()
-    embedding_search = EmbeddingSearch(config=embedding_config)
+    embedding_search = EmbeddingSearch(embedding_config)
     await embedding_search.initialize()
     
     hybrid_retriever = HybridRetriever(
@@ -86,9 +89,15 @@ app = FastAPI(
 # Configure CORS for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure based on your frontend URL
+    allow_origins=[
+        "http://localhost:8081",  # Expo dev server
+        "http://localhost:19006", # Expo web dev server  
+        "http://127.0.0.1:8081",  # Alternative localhost
+        "http://127.0.0.1:19006", # Alternative localhost
+        "*",  # Allow all for development
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

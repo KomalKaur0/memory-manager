@@ -1,9 +1,45 @@
-// API Configuration - simplified for local development
-export const API_CONFIG = {
-  // Backend runs locally, frontend uses mock data
-  BASE_URL: 'http://localhost:8000',
-  TIMEOUT: 30000,
+// API Configuration - use environment variables for backend URL
+const getBackendUrl = () => {
+  // Check environment variables (Expo uses EXPO_PUBLIC_ prefix)
+  const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+  const localUrl = process.env.EXPO_PUBLIC_LOCAL_URL;
+  
+  console.log('🔧 Environment URLs:', { envUrl, localUrl });
+  
+  // Prefer environment URL, fallback to localhost
+  return envUrl || localUrl || 'http://localhost:8000';
 };
+
+const getFallbackUrls = () => {
+  // Get fallback URLs from environment
+  const fallbackEnv = process.env.EXPO_PUBLIC_FALLBACK_URLS;
+  
+  if (fallbackEnv) {
+    return fallbackEnv.split(',').map(url => url.trim());
+  }
+  
+  // Default fallbacks
+  return [
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+    'http://192.168.156.157:8000',
+  ];
+};
+
+export const API_CONFIG = {
+  BASE_URL: getBackendUrl(),
+  TIMEOUT: 30000,
+  FALLBACK_URLS: getFallbackUrls(),
+  DEBUG_MODE: process.env.EXPO_PUBLIC_DEBUG_MODE === 'true',
+  AUTO_CONNECT: process.env.EXPO_PUBLIC_AUTO_CONNECT === 'true',
+};
+
+console.log('🌐 API Configuration:', {
+  baseUrl: API_CONFIG.BASE_URL,
+  fallbackCount: API_CONFIG.FALLBACK_URLS.length,
+  debugMode: API_CONFIG.DEBUG_MODE,
+  autoConnect: API_CONFIG.AUTO_CONNECT,
+});
 
 // API Endpoints
 export const ENDPOINTS = {
@@ -19,7 +55,7 @@ export const ENDPOINTS = {
   // Chat
   CHAT: {
     SEND_MESSAGE: '/api/chat/send',
-    GET_MESSAGES: '/api/chat/messages',
+    GET_MESSAGES: '/api/chat/history',
     STREAM: '/api/chat/stream',
   },
   

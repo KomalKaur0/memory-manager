@@ -1195,7 +1195,7 @@ class RateLimitError(EmbeddingError):
     pass
 
 def get_embedding_config_from_env():
-    api_key = os.getenv('VOYAGER_LITE_API_KEY')
+    api_key = os.getenv('VOYAGE_API_KEY')
     if not api_key:
-        raise ValueError('VOYAGER_LITE_API_KEY not set in environment')
+        raise ValueError('VOYAGE_API_KEY not set in environment')
     return EmbeddingConfig(api_key=api_key)

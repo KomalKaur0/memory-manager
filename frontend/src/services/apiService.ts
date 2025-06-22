@@ -22,14 +22,22 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     try {
+      console.log(`🌐 API Request: ${this.baseUrl}${endpoint}`);
+      
+      // Use AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
+      
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         ...options,
         headers: {
           ...getHeaders(),
           ...options.headers,
         },
-        timeout: API_CONFIG.TIMEOUT,
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -73,12 +81,12 @@ class ApiService {
   }
 
   // Chat Operations
-  async sendMessage(content: string): Promise<ApiResponse<ChatMessage>> {
-    return this.fetchApi<ChatMessage>(ENDPOINTS.CHAT.SEND_MESSAGE, {
+  async sendMessage(content: string, conversationHistory: any[] = []): Promise<ApiResponse<any>> {
+    return this.fetchApi<any>(ENDPOINTS.CHAT.SEND_MESSAGE, {
       method: 'POST',
       body: JSON.stringify({
         content,
-        timestamp: Date.now(),
+        conversation_history: conversationHistory,
       }),
     });
   }
@@ -158,12 +166,34 @@ class ApiService {
   // Connection Health Check
   async healthCheck(): Promise<boolean> {
     try {
+      console.log(`🔍 Health check: ${this.baseUrl}/health`);
+      
+      // Use AbortController for timeout instead of fetch timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       const response = await fetch(`${this.baseUrl}/health`, {
         method: 'GET',
-        timeout: 5000,
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+        },
       });
-      return response.ok;
-    } catch {
+      
+      clearTimeout(timeoutId);
+      
+      console.log(`✅ Health check response: ${response.status} ${response.statusText}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🏥 Health data:', data);
+        return true;
+      } else {
+        console.warn(`❌ Health check failed: ${response.status}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Health check error:', error);
       return false;
     }
   }
