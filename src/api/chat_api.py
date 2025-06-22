@@ -177,7 +177,7 @@ async def send_message(
         
         # Step 6: Generate AI response
         ai_response = await _generate_ai_response_with_context(
-            request.content, selected_memories, final_relevance_scores
+            request.content, selected_memories, final_relevance_scores, claude_client
         )
         
         # Step 7: Evaluate response quality and record co-access feedback
@@ -449,7 +449,7 @@ async def websocket_chat(
                 
                 # Generate AI response
                 ai_response = await _generate_ai_response_with_context(
-                    message_content, selected_memories, final_relevance_scores
+                    message_content, selected_memories, final_relevance_scores, claude_client
                 )
                 
                 # Evaluate response quality and record co-access feedback
@@ -538,15 +538,60 @@ async def get_chat_history(
 async def _generate_ai_response_with_context(
     user_message: str, 
     selected_memories: List, 
-    relevance_scores: List
+    relevance_scores: List,
+    claude_client=None
 ) -> str:
     """
-    Generate AI response based on user message and intelligently selected memories
+    Generate AI response based on user message and intelligently selected memories using Claude
     """
     if not selected_memories:
         return f"I understand you're asking about '{user_message}', but I don't have specific memories related to this topic yet."
     
-    # Create response mentioning relevant memories with their reasoning
+    # Prepare memory context for Claude
+    memory_context = []
+    for i, (memory, score) in enumerate(zip(selected_memories, relevance_scores)):
+        context_entry = f"Memory {i+1} (relevance: {score.overall:.2f}):\n"
+        context_entry += f"- Concept: {memory.concept}\n"
+        context_entry += f"- Summary: {memory.summary}\n"
+        context_entry += f"- Content: {memory.full_content[:300]}{'...' if len(memory.full_content) > 300 else ''}\n"
+        context_entry += f"- Tags: {', '.join(memory.tags)}\n"
+        if score.must_keep:
+            context_entry += "- Note: Critical memory\n"
+        memory_context.append(context_entry)
+    
+    # Try to use Claude for intelligent response generation
+    if claude_client:
+        try:
+            # Create prompt for Claude to generate response using memory context
+            claude_prompt = f"""You are an AI assistant with access to a memory system. A user has asked you a question, and your memory system has retrieved relevant memories to help you answer.
+
+User's Question: {user_message}
+
+Relevant Memories Retrieved:
+{chr(10).join(memory_context)}
+
+Based on these memories and your general knowledge, please provide a helpful, accurate response to the user's question. Use the memory information to inform your answer, but don't just list the memories - synthesize them into a coherent, useful response.
+
+If the memories don't contain enough information to fully answer the question, acknowledge what you can answer based on the memories and what limitations you have.
+
+Keep your response conversational and helpful."""
+
+            # Call Claude API
+            if hasattr(claude_client, 'messages') and hasattr(claude_client.messages, 'create'):
+                message = claude_client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=1000,
+                    messages=[{"role": "user", "content": claude_prompt}]
+                )
+                claude_response = message.content[0].text if message.content else ""
+                
+                if claude_response.strip():
+                    return claude_response.strip()
+            
+        except Exception as e:
+            logger.warning(f"Failed to generate response with Claude: {e}. Falling back to template response.")
+    
+    # Fallback to template response if Claude is not available or fails
     memory_insights = []
     for i, (memory, score) in enumerate(zip(selected_memories, relevance_scores)):
         insight = f"From my memory about '{memory.concept}' (relevance: {score.overall:.2f}): {memory.summary}"
