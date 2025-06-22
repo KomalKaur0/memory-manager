@@ -4,6 +4,8 @@ FastAPI main application for AI Memory System
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
+import os
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +18,11 @@ from src.api.chat_api import chat_router
 from src.core.memory_graph import MemoryGraph
 from src.retrieval.embedding_search_mock import EmbeddingSearch
 from src.retrieval.hybrid_retriever_simple import HybridRetriever
+from src.agents.relevance_agent import get_claude_client_from_env
+from src.retrieval.embedding_search import get_embedding_config_from_env
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,13 +42,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     
     # Initialize core components
     memory_graph = MemoryGraph(decay_rate=0.01)
-    embedding_search = EmbeddingSearch(model_name="mock-model")
+    
+    # Initialize embedding search with API key from .env
+    embedding_config = get_embedding_config_from_env()
+    embedding_search = EmbeddingSearch(config=embedding_config)
     await embedding_search.initialize()
     
     hybrid_retriever = HybridRetriever(
         memory_graph=memory_graph,
         embedding_search=embedding_search
     )
+    
+    # Initialize Claude client with API key from .env
+    claude_client = get_claude_client_from_env()
     
     # Store instances in app state for access in routes
     app.state.memory_graph = memory_graph

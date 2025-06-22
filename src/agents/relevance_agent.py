@@ -14,6 +14,8 @@ import re
 import math
 from datetime import datetime, timedelta
 import logging
+import os
+from anthropic import Anthropic
 
 from src.core.memory_node import MemoryNode
 from src.core.memory_graph import MemoryGraph
@@ -767,3 +769,9 @@ Format: "0.X Brief reason here"
         relevant_memories.sort(key=lambda x: x[1].overall, reverse=True)
         
         return relevant_memories
+
+def get_claude_client_from_env():
+    api_key = os.getenv('CLAUDE_API_KEY')
+    if not api_key:
+        raise ValueError('CLAUDE_API_KEY not set in environment')
+    return Anthropic(api_key=api_key)

@@ -16,6 +16,7 @@ import hashlib
 import json
 import requests
 from collections import defaultdict
+import os
 
 
 @dataclass
@@ -1192,3 +1193,9 @@ class SearchError(EmbeddingError):
 class RateLimitError(EmbeddingError):
     """API rate limit exceeded"""
     pass
+
+def get_embedding_config_from_env():
+    api_key = os.getenv('VOYAGER_LITE_API_KEY')
+    if not api_key:
+        raise ValueError('VOYAGER_LITE_API_KEY not set in environment')
+    return EmbeddingConfig(api_key=api_key)
