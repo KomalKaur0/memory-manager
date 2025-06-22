@@ -20,6 +20,7 @@ from src.retrieval.embedding_search_mock import EmbeddingSearch
 from src.retrieval.hybrid_retriever_simple import HybridRetriever
 from src.agents.relevance_agent import get_claude_client_from_env
 from src.agents.connection_agent import ConnectionAgent
+from src.agents.model_client import get_model_client_from_env
 from src.retrieval.embedding_search import get_embedding_config_from_env
 
 # Load environment variables from .env file
@@ -57,8 +58,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     # Initialize connection agent for co-access tracking
     connection_agent = ConnectionAgent(memory_graph=memory_graph)
     
-    # Initialize Claude client with API key from .env
-    claude_client = get_claude_client_from_env()
+    # Initialize unified model client with API key from .env
+    model_client = get_model_client_from_env()
+    
+    # Keep backward compatibility
+    claude_client = model_client
     
     # Store instances in app state for access in routes
     app.state.memory_graph = memory_graph

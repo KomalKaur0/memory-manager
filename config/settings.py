@@ -101,6 +101,15 @@ class Settings(BaseSettings):
     log_rotation: str = "midnight"
     log_retention_days: int = 30
     
+    # AI Model Settings
+    ai_model_provider: str = "claude"  # claude, gemini, or mock
+    claude_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    claude_model: str = "claude-3-haiku-20240307"
+    gemini_model: str = "gemini-1.5-flash"
+    model_max_tokens: int = 100
+    model_temperature: float = 0.1
+    
     # Feature Flags
     enable_auto_connections: bool = True
     enable_temporal_decay: bool = True
@@ -138,6 +147,15 @@ class Settings(BaseSettings):
         if v.upper() not in valid_levels:
             raise ValueError(f"Invalid log level: {v}")
         return v.upper()
+    
+    @field_validator("ai_model_provider")
+    @classmethod
+    def validate_ai_model_provider(cls, v: str) -> str:
+        """Validate AI model provider."""
+        valid_providers = ["claude", "gemini", "mock"]
+        if v.lower() not in valid_providers:
+            raise ValueError(f"Invalid AI model provider: {v}. Must be one of {valid_providers}")
+        return v.lower()
     
     @field_validator("decay_rate", "connection_strength_increment", "min_connection_weight", "max_connection_weight", "semantic_search_threshold", "hybrid_search_alpha", "import_similarity_threshold", "auto_connect_threshold")
     @classmethod
@@ -208,6 +226,18 @@ class Settings(BaseSettings):
             "default_limit": self.default_search_limit,
             "semantic_threshold": self.semantic_search_threshold,
             "hybrid_alpha": self.hybrid_search_alpha,
+        }
+    
+    def get_ai_model_config(self) -> Dict[str, Any]:
+        """Get AI model configuration."""
+        return {
+            "provider": self.ai_model_provider,
+            "claude_api_key": self.claude_api_key,
+            "gemini_api_key": self.gemini_api_key,
+            "claude_model": self.claude_model,
+            "gemini_model": self.gemini_model,
+            "max_tokens": self.model_max_tokens,
+            "temperature": self.model_temperature,
         }
 
 

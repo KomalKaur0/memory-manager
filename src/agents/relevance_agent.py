@@ -19,6 +19,7 @@ from anthropic import Anthropic
 
 from src.core.memory_node import MemoryNode
 from src.core.memory_graph import MemoryGraph
+from src.agents.model_client import UnifiedModelClient, get_model_client_from_env
 
 logger = logging.getLogger(__name__)
 
@@ -78,17 +79,17 @@ class RelevanceAgent:
     the primary filter for connection strengthening and search ranking.
     """
     
-    def __init__(self, config: Optional[Dict] = None, claude_client=None, memory_graph=None):
+    def __init__(self, config: Optional[Dict] = None, model_client: Optional[UnifiedModelClient] = None, memory_graph=None):
         """
         Initialize the Relevance Agent.
         
         Args:
             config: Configuration parameters
-            claude_client: Optional Claude API client for associative scoring
+            model_client: Optional unified model client for associative scoring
             memory_graph: Memory graph for connection strength analysis
         """
         self.config = config or {}
-        self.claude_client = claude_client
+        self.model_client = model_client
         self.memory_graph = memory_graph
         
         # Connection learning state
@@ -363,10 +364,10 @@ class RelevanceAgent:
         return min(1.0, functional_score)
     
     def _calculate_associative_relevance(self, memory: MemoryNode, query: str, context: QueryContext) -> float:
-        """Calculate associative relevance using Claude AI for intelligent assessment."""
-        if not self.enable_claude_associative or not self.claude_client:
-            # Fallback to simple heuristic if Claude is not available
-            logger.info(f"Claude fallback used for memory '{memory.concept}': Claude not available (enabled={self.enable_claude_associative}, client={self.claude_client is not None})")
+        """Calculate associative relevance using AI model for intelligent assessment."""
+        if not self.enable_claude_associative or not self.model_client:
+            # Fallback to simple heuristic if AI model is not available
+            logger.info(f"AI model fallback used for memory '{memory.concept}': AI model not available (enabled={self.enable_claude_associative}, client={self.model_client is not None})")
             return self._calculate_associative_fallback(memory, query, context)
         
         # Create cache key for this evaluation
@@ -412,11 +413,11 @@ Respond with just a number between 0.0 and 1.0, followed by a brief reason (max 
 Format: "0.X Brief reason here"
 """
             
-            # Call Claude API
-            response = self._call_claude_api(prompt)
+            # Call AI model API
+            response = self._call_ai_model_api(prompt)
             
             # Parse response
-            score = self._parse_claude_response(response)
+            score = self._parse_ai_model_response(response)
             
             # Cache the result
             self.claude_cache[cache_key] = score
@@ -425,7 +426,7 @@ Format: "0.X Brief reason here"
             
         except Exception as e:
             # Fall back to heuristic on any error
-            logger.warning(f"Claude API error for associative scoring of memory '{memory.concept}': {e}. Falling back to heuristic method.")
+            logger.warning(f"AI model API error for associative scoring of memory '{memory.concept}': {e}. Falling back to heuristic method.")
             return self._calculate_associative_fallback(memory, query, context)
     
     def _calculate_associative_fallback(self, memory: MemoryNode, query: str, context: QueryContext) -> float:
@@ -531,36 +532,24 @@ Format: "0.X Brief reason here"
         
         return connection_strength_score
     
-    def _call_claude_api(self, prompt: str) -> str:
-        """Make a call to Claude API with timeout and error handling."""
-        # This will be implemented based on the specific Claude client available
-        # For now, using a placeholder that would integrate with anthropic client
+    def _call_ai_model_api(self, prompt: str) -> str:
+        """Make a call to AI model API with error handling."""
+        if not self.model_client:
+            raise Exception("Model client not configured")
         
-        if hasattr(self.claude_client, 'messages') and hasattr(self.claude_client.messages, 'create'):
-            # Anthropic client
-            try:
-                message = self.claude_client.messages.create(
-                    model="claude-3-haiku-20240307",  # Use fast model for relevance scoring
-                    max_tokens=100,
-                    timeout=self.claude_timeout,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                return message.content[0].text if message.content else "0.0 No response"
-            except Exception as e:
-                raise Exception(f"Anthropic API error: {e}")
-        
-        elif callable(self.claude_client):
-            # Simple callable client
-            try:
-                return self.claude_client(prompt, timeout=self.claude_timeout)
-            except Exception as e:
-                raise Exception(f"Claude client error: {e}")
-        
-        else:
-            raise Exception("Invalid Claude client configuration")
+        try:
+            response = self.model_client.generate_response(prompt, max_tokens=100)
+            
+            if response.error:
+                raise Exception(f"Model API error: {response.error}")
+            
+            return response.content or "0.0 No response"
+            
+        except Exception as e:
+            raise Exception(f"Model client error: {e}")
     
-    def _parse_claude_response(self, response: str) -> float:
-        """Parse Claude's response to extract the relevance score."""
+    def _parse_ai_model_response(self, response: str) -> float:
+        """Parse AI model's response to extract the relevance score."""
         try:
             # Look for a number at the start of the response
             import re
@@ -770,8 +759,10 @@ Format: "0.X Brief reason here"
         
         return relevant_memories
 
+def get_model_client_from_env_legacy():
+    """Legacy function for backward compatibility - use get_model_client_from_env instead."""
+    return get_model_client_from_env()
+
 def get_claude_client_from_env():
-    api_key = os.getenv('CLAUDE_API_KEY')
-    if not api_key:
-        raise ValueError('CLAUDE_API_KEY not set in environment')
-    return Anthropic(api_key=api_key)
+    """Legacy function name - returns unified model client for backward compatibility."""
+    return get_model_client_from_env()

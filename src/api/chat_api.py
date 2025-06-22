@@ -105,7 +105,7 @@ async def send_message(
                 candidate_memories.append(node)
         
         # Step 3: Use RelevanceAgent to evaluate and score memories
-        relevance_agent = RelevanceAgent(memory_graph=memory_graph, claude_client=claude_client)
+        relevance_agent = RelevanceAgent(memory_graph=memory_graph, model_client=claude_client)
         
         # Get reference memory IDs (recently accessed memories in this session)
         reference_memory_ids = [result["memory_id"] for result in search_results[:3]]
@@ -464,8 +464,13 @@ Rate the response quality on a scale of 0.0 to 1.0 considering:
 Respond with just a number between 0.0 and 1.0.
 """
         
-        # Call Claude for evaluation
-        if hasattr(claude_client, 'messages') and hasattr(claude_client.messages, 'create'):
+        # Call AI model for evaluation
+        if hasattr(claude_client, 'generate_response'):
+            # Unified model client
+            response = claude_client.generate_response(evaluation_prompt, max_tokens=50)
+            response_text = response.content if response.content else "0.5"
+        elif hasattr(claude_client, 'messages') and hasattr(claude_client.messages, 'create'):
+            # Legacy Claude client support
             message = claude_client.messages.create(
                 model="claude-3-haiku-20240307",
                 max_tokens=50,

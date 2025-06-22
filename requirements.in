@@ -6,6 +6,7 @@ pydantic
 pytest
 python-dotenv
 anthropic
+google-generativeai
 typing
 enum
 uuid
