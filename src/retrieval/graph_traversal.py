@@ -1004,43 +1004,44 @@ class GraphTraversal:
         
         communities = {}
         community_id = 0
-        unassigned = set(memory_ids)
+        if memory_ids:
+            unassigned = set(memory_ids)
         
-        while unassigned:
-            # Start a new community with an unassigned node
-            seed = unassigned.pop()
-            current_community = {seed}
-            communities[seed] = community_id
-            
-            # Grow community by adding strongly connected neighbors
-            changed = True
-            while changed:
-                changed = False
-                new_members = set()
+            while unassigned:
+                # Start a new community with an unassigned node
+                seed = unassigned.pop()
+                current_community = {seed}
+                communities[seed] = community_id
                 
-                for member_id in current_community:
-                    try:
-                        connections = self.graph.get_connections(member_id)
-                        reverse_connections = self.graph.get_reverse_connections(member_id)
-                        
-                        for neighbor_id, weight in connections + reverse_connections:
-                            if (neighbor_id in unassigned and 
-                                weight >= self.config.min_connection_weight * 2):  # Higher threshold for communities
-                                new_members.add(neighbor_id)
-                                
-                    except Exception as e:
-                        self.logger.debug(f"Community detection failed for {member_id}: {e}")
-                        continue
+                # Grow community by adding strongly connected neighbors
+                changed = True
+                while changed:
+                    changed = False
+                    new_members = set()
+                    
+                    for member_id in current_community:
+                        try:
+                            connections = self.graph.get_connections(member_id)
+                            reverse_connections = self.graph.get_reverse_connections(member_id)
+                            
+                            for neighbor_id, weight in connections + reverse_connections:
+                                if (neighbor_id in unassigned and 
+                                    weight >= self.config.min_connection_weight * 2):  # Higher threshold for communities
+                                    new_members.add(neighbor_id)
+                                    
+                        except Exception as e:
+                            self.logger.debug(f"Community detection failed for {member_id}: {e}")
+                            continue
+                    
+                    # Add new members to community
+                    for new_member in new_members:
+                        if new_member in unassigned:
+                            unassigned.remove(new_member)
+                            current_community.add(new_member)
+                            communities[new_member] = community_id
+                            changed = True
                 
-                # Add new members to community
-                for new_member in new_members:
-                    if new_member in unassigned:
-                        unassigned.remove(new_member)
-                        current_community.add(new_member)
-                        communities[new_member] = community_id
-                        changed = True
-            
-            community_id += 1
+                community_id += 1
         
         return communities
     
@@ -1065,6 +1066,8 @@ class GraphTraversal:
                 self.logger.error(f"Failed to get all memory IDs: {e}")
                 return {}
         
+        assert subgraph_ids is not None
+
         num_nodes = len(subgraph_ids)
         if num_nodes < 2:
             return {"num_nodes": num_nodes, "num_edges": 0}
@@ -1327,7 +1330,7 @@ class GraphTraversal:
         
         return True
     
-    def _update_traversal_stats(self, results_found: int, traversal_time: float) -> None:
+    def _update_traversal_stats(self, results_found, traversal_time) -> None:
         """Update traversal statistics"""
         self.stats.total_traversals += 1
         

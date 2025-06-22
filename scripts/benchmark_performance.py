@@ -31,7 +31,7 @@ from src.retrieval.embedding_search import EmbeddingSearch, EmbeddingConfig
 from src.retrieval.hybrid_retriever import HybridRetriever, RetrievalConfig
 from src.agents.relevance_agent import RelevanceAgent, QueryContext
 from src.agents.filter_agent import FilterAgent
-from src.retrieval.graph_traversal import GraphTraversal
+from src.retrieval.graph_traversal import GraphTraversal, TraversalConfig
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -82,7 +82,8 @@ class MemorySystemBenchmark:
         self.hybrid_retriever = None
         self.relevance_agent = None
         self.filter_agent = None
-        
+        self.traversal_config = TraversalConfig()
+
         # Test data
         self.test_memories: List[MemoryNode] = []
         self.test_queries: List[str] = []
@@ -101,7 +102,7 @@ class MemorySystemBenchmark:
             cache_embeddings=True
         )
         self.embedding_search = EmbeddingSearch(embedding_config)
-        await self.embedding_search.initialize()
+        # await self.embedding_search.initialize_client()
         
         # Initialize hybrid retriever
         retrieval_config = RetrievalConfig(
@@ -109,7 +110,7 @@ class MemorySystemBenchmark:
             embedding_weight=0.6,
             graph_weight=0.4
         )
-        graph_traversal = GraphTraversal(self.memory_graph)
+        graph_traversal = GraphTraversal(self.memory_graph, config=self.traversal_config)
         self.hybrid_retriever = HybridRetriever(
             embedding_search=self.embedding_search,
             graph_traversal=graph_traversal,

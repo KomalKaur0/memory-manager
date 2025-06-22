@@ -12,7 +12,7 @@ from neo4j import GraphDatabase, Driver, Session
 from neo4j.exceptions import Neo4jError
 
 from ..core.memory_node import MemoryNode, Connection, ConnectionType
-from ..config.settings import get_settings
+from ...config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

@@ -213,7 +213,7 @@ class EmbeddingSearch:
     def encode_batch(self, 
                     texts: List[str], 
                     input_type: Optional[str] = None,
-                    progress_callback: Optional[callable] = None) -> List[np.ndarray]:
+                    progress_callback = None) -> List[np.ndarray]:
         """
         Efficiently encode multiple texts in batches.
         
@@ -264,8 +264,9 @@ class EmbeddingSearch:
                     memory_id: str, 
                     content: str,
                     metadata: Dict[str, Any],
-                    tags: List[str] = None,
-                    summary: str = None) -> bool:
+                    summary: str = '',
+                    tags: List[str] = []
+                    ) -> bool:
         """
         Generate embedding for a memory and store in vector database.
         
@@ -333,7 +334,7 @@ class EmbeddingSearch:
     
     def index_memory_batch(self, 
                           memories: List[Dict[str, Any]],
-                          progress_callback: Optional[callable] = None) -> Dict[str, bool]:
+                          progress_callback = None) -> Dict[str, bool]:
         """
         Index multiple memories efficiently in batches.
         
@@ -363,7 +364,7 @@ class EmbeddingSearch:
                 content=content,
                 metadata=metadata,
                 tags=tags,
-                summary=summary
+                summary=str(summary)
             )
             
             results[memory_id] = success
@@ -421,7 +422,7 @@ class EmbeddingSearch:
             raise SearchError(f"Search operation failed: {e}")
     
     def search_by_embedding(self,
-                           query_embedding: np.ndarray,
+                           query_embedding,
                            top_k: int = 10,
                            similarity_threshold: float = 0.7,
                            filters: Optional[Dict[str, Any]] = None,
@@ -931,8 +932,8 @@ class EmbeddingSearch:
         return "embeddings" in data and isinstance(data["embeddings"], dict)
     
     def rebuild_index(self, 
-                     memory_source: callable,
-                     progress_callback: Optional[callable] = None) -> bool:
+                     memory_source,
+                     progress_callback = None) -> bool:
         """
         Rebuild the entire embedding index from scratch.
         
