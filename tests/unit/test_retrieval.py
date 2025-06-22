@@ -67,6 +67,23 @@ from hybrid_retriever import (
     TagFilter
 )
 
+from search_strategies import (
+    SearchStrategy,
+    StrategyResult,
+    QueryAnalysis,
+    SearchContext,
+    BaseSearchStrategy,
+    SearchStrategies,
+    HypotheticalDocumentStrategy,
+    TemporalSearchStrategy,
+    ConceptExpansionStrategy,
+    KeywordFallbackStrategy,
+    StrategyError,
+    StrategyNotAvailableError,
+    QueryAnalysisError,
+    HypotheticalGenerationError
+)
+
 
 # =================== EMBEDDING SEARCH TESTS ===================
 
@@ -2569,10 +2586,626 @@ class TestHybridRetrieverErrorHandling:
         assert result.graph_results_count == 0
 
 
-class TestSearchStrategies:
-    """Placeholder tests for search_strategies.py (to be implemented)"""
+# =================== SEARCH STRATEGIES TESTS ===================
+
+# Shared fixtures for search strategies tests
+@pytest.fixture
+def mock_hybrid_retriever_for_strategies():
+    """Create a mock hybrid retriever for search strategies testing"""
+    retriever = Mock()
     
-    def test_placeholder(self):
-        """Placeholder test - will be implemented when search_strategies.py is ready"""
-        # TODO: Implement when search_strategies.py is available
-        pass
+    # Mock retrieve method to return realistic results
+    mock_result = RetrievalResult(
+        memories=[
+            {"memory_id": "mem_1", "content": "AI and machine learning concepts", "score": 0.9},
+            {"memory_id": "mem_2", "content": "Deep learning neural networks", "score": 0.8},
+            {"memory_id": "mem_3", "content": "Natural language processing", "score": 0.7}
+        ],
+        query="test query",
+        total_candidates_found=3,
+        embedding_results_count=3,
+        graph_results_count=0,
+        retrieval_time=0.1,
+        explanation="Test results",
+        confidence_score=0.8
+    )
+    retriever.retrieve.return_value = mock_result
+    
+    return retriever
+
+@pytest.fixture
+def mock_memory_graph_for_strategies():
+    """Create a mock memory graph for search strategies testing"""
+    graph = Mock()
+    
+    # Mock memory content retrieval
+    content_map = {
+        "mem_1": "This is a memory about artificial intelligence and machine learning algorithms",
+        "mem_2": "Deep learning and neural networks for AI applications", 
+        "mem_3": "Natural language processing techniques and methods",
+        "mem_4": "Computer vision and image recognition systems",
+        "mem_5": "Yesterday I was thinking about robotics and automation"
+    }
+    graph.get_memory_content.side_effect = lambda mid: content_map.get(mid, f"Content for {mid}")
+    graph.get_all_memory_ids.return_value = list(content_map.keys())
+    
+    return graph
+
+@pytest.fixture
+def search_context():
+    """Create a standard search context for testing"""
+    return SearchContext(
+        original_query="test query",
+        user_id="test_user",
+        conversation_history=["Hello", "Tell me about AI"],
+        recent_memories=["mem_1", "mem_2"],
+        current_time=datetime.now()
+    )
+
+@pytest.fixture
+def search_strategies(mock_hybrid_retriever_for_strategies, mock_memory_graph_for_strategies):
+    """Create a configured SearchStrategies instance for testing"""
+    return SearchStrategies(
+        hybrid_retriever=mock_hybrid_retriever_for_strategies,
+        memory_graph=mock_memory_graph_for_strategies
+    )
+
+
+class TestSearchStrategiesDataclasses:
+    """Test dataclass definitions for search strategies"""
+    
+    def test_search_strategy_enum(self):
+        """Test SearchStrategy enum values"""
+        assert SearchStrategy.HYPOTHETICAL_DOCUMENT.value == "hypothetical_document"
+        assert SearchStrategy.TEMPORAL_SEARCH.value == "temporal_search"
+        assert SearchStrategy.CONCEPT_EXPANSION.value == "concept_expansion"
+        assert SearchStrategy.SIMILARITY_CLUSTERING.value == "similarity_clustering"
+        assert SearchStrategy.KEYWORD_FALLBACK.value == "keyword_fallback"
+        assert SearchStrategy.FUZZY_MATCHING.value == "fuzzy_matching"
+        assert SearchStrategy.SEMANTIC_ROLES.value == "semantic_roles"
+        assert SearchStrategy.CONVERSATIONAL_CONTEXT.value == "conversational_context"
+        assert SearchStrategy.MULTI_MODAL.value == "multi_modal"
+    
+    def test_strategy_result_creation(self):
+        """Test StrategyResult dataclass creation"""
+        result = StrategyResult(
+            memory_ids=["mem_1", "mem_2"],
+            scores=[0.9, 0.8],
+            strategy_used=SearchStrategy.HYPOTHETICAL_DOCUMENT,
+            confidence=0.85,
+            execution_time=0.25,
+            metadata={"test": "data"},
+            explanation="Test explanation"
+        )
+        
+        assert result.memory_ids == ["mem_1", "mem_2"]
+        assert result.scores == [0.9, 0.8]
+        assert result.strategy_used == SearchStrategy.HYPOTHETICAL_DOCUMENT
+        assert result.confidence == 0.85
+        assert result.execution_time == 0.25
+        assert result.metadata["test"] == "data"
+        assert result.explanation == "Test explanation"
+    
+    def test_query_analysis_creation(self):
+        """Test QueryAnalysis dataclass creation"""
+        analysis = QueryAnalysis(
+            query="What did I think about AI last week?",
+            query_type="temporal",
+            entities=["AI"],
+            concepts=["think", "AI"],
+            temporal_indicators=["last week"],
+            question_type="what",
+            complexity_score=0.6,
+            ambiguity_score=0.3,
+            suggested_strategies=[SearchStrategy.TEMPORAL_SEARCH, SearchStrategy.CONCEPT_EXPANSION]
+        )
+        
+        assert analysis.query == "What did I think about AI last week?"
+        assert analysis.query_type == "temporal"
+        assert "AI" in analysis.entities
+        assert "last week" in analysis.temporal_indicators
+        assert analysis.question_type == "what"
+        assert analysis.complexity_score == 0.6
+        assert analysis.ambiguity_score == 0.3
+        assert SearchStrategy.TEMPORAL_SEARCH in analysis.suggested_strategies
+    
+    def test_search_context_creation(self):
+        """Test SearchContext dataclass creation"""
+        now = datetime.now()
+        context = SearchContext(
+            original_query="test query",
+            user_id="user123",
+            session_id="session456",
+            conversation_history=["msg1", "msg2"],
+            recent_memories=["mem1", "mem2"],
+            search_history=["prev query"],
+            current_time=now
+        )
+        
+        assert context.original_query == "test query"
+        assert context.user_id == "user123"
+        assert context.session_id == "session456"
+        assert len(context.conversation_history) == 2
+        assert len(context.recent_memories) == 2
+        assert context.current_time == now
+
+
+class TestSearchStrategiesInit:
+    """Test SearchStrategies class initialization"""
+    
+    def test_init_with_required_components(self, mock_hybrid_retriever_for_strategies, mock_memory_graph_for_strategies):
+        """Test initialization with required components"""
+        strategies = SearchStrategies(
+            hybrid_retriever=mock_hybrid_retriever_for_strategies,
+            memory_graph=mock_memory_graph_for_strategies
+        )
+        
+        assert strategies.retriever == mock_hybrid_retriever_for_strategies
+        assert strategies.memory_graph == mock_memory_graph_for_strategies
+        assert strategies.logger is not None
+        assert len(strategies.strategies) > 0  # Should have default strategies
+        assert isinstance(strategies.strategy_stats, dict)
+    
+    def test_init_with_optional_components(self, mock_hybrid_retriever_for_strategies, mock_memory_graph_for_strategies):
+        """Test initialization with optional components"""
+        import logging
+        custom_logger = logging.getLogger("test_strategies")
+        mock_nlp = Mock()
+        
+        strategies = SearchStrategies(
+            hybrid_retriever=mock_hybrid_retriever_for_strategies,
+            memory_graph=mock_memory_graph_for_strategies,
+            nlp_processor=mock_nlp,
+            logger=custom_logger
+        )
+        
+        assert strategies.nlp_processor == mock_nlp
+        assert strategies.logger == custom_logger
+    
+    def test_default_strategies_registered(self, search_strategies):
+        """Test that default strategies are registered"""
+        expected_strategies = [
+            SearchStrategy.HYPOTHETICAL_DOCUMENT,
+            SearchStrategy.TEMPORAL_SEARCH,
+            SearchStrategy.CONCEPT_EXPANSION,
+            SearchStrategy.KEYWORD_FALLBACK
+        ]
+        
+        for strategy in expected_strategies:
+            assert strategy in search_strategies.strategies
+            assert isinstance(search_strategies.strategies[strategy], BaseSearchStrategy)
+
+
+class TestSearchStrategiesQueryAnalysis:
+    """Test query analysis functionality"""
+    
+    def test_analyze_simple_query(self, search_strategies, search_context):
+        """Test analysis of simple factual query"""
+        analysis = search_strategies.analyze_query("What is machine learning?", search_context)
+        
+        assert isinstance(analysis, QueryAnalysis)
+        assert analysis.query == "What is machine learning?"
+        assert analysis.question_type == "what"
+        assert "factual" in analysis.query_type or "associative" in analysis.query_type
+        assert len(analysis.suggested_strategies) > 0
+    
+    def test_analyze_temporal_query(self, search_strategies, search_context):
+        """Test analysis of temporal query"""
+        analysis = search_strategies.analyze_query("What did I think about AI last week?", search_context)
+        
+        assert analysis.query_type == "temporal"
+        assert len(analysis.temporal_indicators) > 0
+        assert SearchStrategy.TEMPORAL_SEARCH in analysis.suggested_strategies
+    
+    def test_analyze_complex_query(self, search_strategies, search_context):
+        """Test analysis of complex exploratory query"""
+        analysis = search_strategies.analyze_query(
+            "Can you help me understand the relationships between machine learning, deep learning, and artificial intelligence?", 
+            search_context
+        )
+        
+        assert analysis.complexity_score > 0.5
+        assert "exploratory" in analysis.query_type or "associative" in analysis.query_type
+        assert len(analysis.concepts) > 3
+    
+    def test_analyze_ambiguous_query(self, search_strategies, search_context):
+        """Test analysis of ambiguous query"""
+        analysis = search_strategies.analyze_query("Tell me about that thing we discussed", search_context)
+        
+        assert analysis.ambiguity_score > 0.3
+        assert SearchStrategy.HYPOTHETICAL_DOCUMENT in analysis.suggested_strategies
+
+
+class TestSearchStrategiesCoreSearch:
+    """Test core search functionality"""
+    
+    def test_search_with_strategy_selection(self, search_strategies, search_context):
+        """Test automatic strategy selection and execution"""
+        result = search_strategies.search_with_strategy_selection(
+            "What is artificial intelligence?",
+            search_context,
+            max_results=5
+        )
+        
+        assert isinstance(result, StrategyResult)
+        assert len(result.memory_ids) > 0
+        assert result.confidence >= 0.0
+        assert result.execution_time > 0
+        assert result.strategy_used in SearchStrategy
+    
+    def test_search_with_fallback_enabled(self, search_strategies, search_context):
+        """Test search with fallback strategy enabled"""
+        # Mock all strategies to return poor results except fallback
+        for strategy_type, strategy_instance in search_strategies.strategies.items():
+            if strategy_type != SearchStrategy.KEYWORD_FALLBACK:
+                strategy_instance.can_handle = Mock(return_value=0.1)
+        
+        result = search_strategies.search_with_strategy_selection(
+            "test query",
+            search_context,
+            fallback_enabled=True
+        )
+        
+        assert isinstance(result, StrategyResult)
+        # Should use fallback or get empty result gracefully
+    
+    def test_search_with_fallback_disabled(self, search_strategies, search_context):
+        """Test search with fallback strategy disabled"""
+        result = search_strategies.search_with_strategy_selection(
+            "test query",
+            search_context,
+            fallback_enabled=False
+        )
+        
+        assert isinstance(result, StrategyResult)
+
+
+class TestSearchStrategiesSpecificMethods:
+    """Test specific search strategy methods"""
+    
+    def test_hypothetical_document_search(self, search_strategies):
+        """Test hypothetical document generation and search"""
+        result = search_strategies.hypothetical_document_search(
+            "abstract concept about creativity",
+            num_hypotheticals=2,
+            creativity_level=0.8
+        )
+        
+        assert isinstance(result, StrategyResult)
+        assert result.strategy_used == SearchStrategy.HYPOTHETICAL_DOCUMENT
+        assert "hypotheticals" in result.metadata
+        assert len(result.explanation) > 0
+    
+    def test_temporal_search(self, search_strategies):
+        """Test temporal-based search"""
+        result = search_strategies.temporal_search(
+            "AI thoughts",
+            "last week",
+            content_weight=0.7,
+            temporal_weight=0.3
+        )
+        
+        assert isinstance(result, StrategyResult)
+        assert result.strategy_used == SearchStrategy.TEMPORAL_SEARCH
+        assert "time_ranges" in result.metadata
+    
+    def test_concept_expansion_search(self, search_strategies):
+        """Test concept expansion search"""
+        result = search_strategies.concept_expansion_search(
+            "machine learning algorithms",
+            expansion_method="semantic",
+            max_expansions=3
+        )
+        
+        assert isinstance(result, StrategyResult)
+        assert result.strategy_used == SearchStrategy.CONCEPT_EXPANSION
+        assert "expanded_concepts" in result.metadata
+        assert "expansion_method" in result.metadata
+    
+    def test_similarity_clustering_search(self, search_strategies):
+        """Test similarity clustering search"""
+        result = search_strategies.similarity_clustering_search(
+            "AI research",
+            cluster_threshold=0.8,
+            max_clusters=3
+        )
+        
+        assert isinstance(result, StrategyResult)
+        assert result.strategy_used == SearchStrategy.SIMILARITY_CLUSTERING
+        assert "num_clusters" in result.metadata
+    
+    def test_keyword_fallback_search(self, search_strategies):
+        """Test keyword fallback search"""
+        result = search_strategies.keyword_fallback_search(
+            "machine learning neural networks",
+            use_stemming=True,
+            fuzzy_matching=True
+        )
+        
+        assert isinstance(result, StrategyResult)
+        assert result.strategy_used == SearchStrategy.KEYWORD_FALLBACK
+        assert "keywords" in result.metadata
+        assert result.metadata["use_stemming"] is True
+        assert result.metadata["fuzzy_matching"] is True
+
+
+class TestSearchStrategiesManagement:
+    """Test strategy registration and management"""
+    
+    def test_register_custom_strategy(self, search_strategies):
+        """Test registering a custom strategy"""
+        class CustomStrategy(BaseSearchStrategy):
+            def can_handle(self, query: str, context: SearchContext) -> float:
+                return 0.5
+            
+            def execute(self, query: str, context: SearchContext, max_results: int = 10) -> StrategyResult:
+                return StrategyResult(
+                    memory_ids=[],
+                    scores=[],
+                    strategy_used=SearchStrategy.FUZZY_MATCHING,
+                    confidence=0.5,
+                    execution_time=0.1
+                )
+        
+        custom_strategy = CustomStrategy()
+        search_strategies.register_strategy(SearchStrategy.FUZZY_MATCHING, custom_strategy)
+        
+        assert SearchStrategy.FUZZY_MATCHING in search_strategies.strategies
+        assert search_strategies.strategies[SearchStrategy.FUZZY_MATCHING] == custom_strategy
+    
+    def test_unregister_strategy(self, search_strategies):
+        """Test unregistering a strategy"""
+        # Register a strategy first
+        class TempStrategy(BaseSearchStrategy):
+            def can_handle(self, query: str, context: SearchContext) -> float:
+                return 0.5
+            
+            def execute(self, query: str, context: SearchContext, max_results: int = 10) -> StrategyResult:
+                return StrategyResult(
+                    memory_ids=[],
+                    scores=[],
+                    strategy_used=SearchStrategy.SEMANTIC_ROLES,
+                    confidence=0.5,
+                    execution_time=0.1
+                )
+        
+        search_strategies.register_strategy(SearchStrategy.SEMANTIC_ROLES, TempStrategy())
+        assert SearchStrategy.SEMANTIC_ROLES in search_strategies.strategies
+        
+        # Unregister it
+        removed = search_strategies.unregister_strategy(SearchStrategy.SEMANTIC_ROLES)
+        assert removed is True
+        assert SearchStrategy.SEMANTIC_ROLES not in search_strategies.strategies
+        
+        # Try to unregister non-existent strategy
+        removed_again = search_strategies.unregister_strategy(SearchStrategy.SEMANTIC_ROLES)
+        assert removed_again is False
+    
+    def test_get_strategy_recommendations(self, search_strategies, search_context):
+        """Test getting strategy recommendations"""
+        recommendations = search_strategies.get_strategy_recommendations(
+            "What did I think about AI yesterday?",
+            search_context
+        )
+        
+        assert isinstance(recommendations, list)
+        assert len(recommendations) > 0
+        
+        # Check format of recommendations
+        for strategy, confidence in recommendations:
+            assert isinstance(strategy, SearchStrategy)
+            assert 0.0 <= confidence <= 1.0
+        
+        # Should be sorted by confidence (highest first)
+        confidences = [conf for _, conf in recommendations]
+        assert confidences == sorted(confidences, reverse=True)
+    
+    def test_get_strategy_statistics(self, search_strategies):
+        """Test getting strategy statistics"""
+        # Perform a search to generate some stats
+        search_context = SearchContext(original_query="test")
+        search_strategies.search_with_strategy_selection("test", search_context)
+        
+        stats = search_strategies.get_strategy_statistics()
+        
+        assert isinstance(stats, dict)
+        # Should have stats for at least one strategy
+        assert len(stats) > 0
+        
+        # Check stats structure
+        for strategy, strategy_stats in stats.items():
+            assert isinstance(strategy, SearchStrategy)
+            assert "total_uses" in strategy_stats
+            assert "avg_confidence" in strategy_stats
+            assert "avg_execution_time" in strategy_stats
+            assert "success_rate" in strategy_stats
+
+
+class TestBuiltInStrategies:
+    """Test built-in strategy implementations"""
+    
+    def test_hypothetical_document_strategy(self, search_strategies):
+        """Test HypotheticalDocumentStrategy"""
+        strategy = search_strategies.strategies[SearchStrategy.HYPOTHETICAL_DOCUMENT]
+        context = SearchContext(original_query="something abstract")
+        
+        # Test can_handle method
+        confidence = strategy.can_handle("tell me about that thing", context)
+        assert confidence > 0.3  # Should handle ambiguous queries well
+        
+        confidence_clear = strategy.can_handle("what is the capital of France?", context)
+        assert confidence_clear < confidence  # Should prefer ambiguous queries
+        
+        # Test execute method
+        result = strategy.execute("something vague", context)
+        assert isinstance(result, StrategyResult)
+        assert result.strategy_used == SearchStrategy.HYPOTHETICAL_DOCUMENT
+    
+    def test_temporal_search_strategy(self, search_strategies):
+        """Test TemporalSearchStrategy"""
+        strategy = search_strategies.strategies[SearchStrategy.TEMPORAL_SEARCH]
+        context = SearchContext(original_query="last week thoughts")
+        
+        # Test can_handle method
+        confidence = strategy.can_handle("what did I think last week?", context)
+        assert confidence > 0.5  # Should handle temporal queries well
+        
+        confidence_no_time = strategy.can_handle("what is machine learning?", context)
+        assert confidence_no_time < confidence  # Should prefer temporal queries
+        
+        # Test execute method
+        result = strategy.execute("thoughts from yesterday", context)
+        assert isinstance(result, StrategyResult)
+        assert result.strategy_used == SearchStrategy.TEMPORAL_SEARCH
+    
+    def test_concept_expansion_strategy(self, search_strategies):
+        """Test ConceptExpansionStrategy"""
+        strategy = search_strategies.strategies[SearchStrategy.CONCEPT_EXPANSION]
+        context = SearchContext(original_query="AI machine learning")
+        
+        # Test can_handle method
+        confidence_medium = strategy.can_handle("AI machine learning concepts", context)
+        confidence_short = strategy.can_handle("AI", context)
+        confidence_long = strategy.can_handle("tell me everything about artificial intelligence machine learning deep learning", context)
+        
+        assert confidence_medium > confidence_short  # Prefers medium-length queries
+        assert confidence_medium >= confidence_long
+        
+        # Test execute method
+        result = strategy.execute("machine learning algorithms", context)
+        assert isinstance(result, StrategyResult)
+        assert result.strategy_used == SearchStrategy.CONCEPT_EXPANSION
+    
+    def test_keyword_fallback_strategy(self, search_strategies):
+        """Test KeywordFallbackStrategy"""
+        strategy = search_strategies.strategies[SearchStrategy.KEYWORD_FALLBACK]
+        context = SearchContext(original_query="any query")
+        
+        # Test can_handle method - should always return same low confidence
+        confidence1 = strategy.can_handle("simple query", context)
+        confidence2 = strategy.can_handle("complex temporal query from last week", context)
+        
+        assert confidence1 == confidence2 == 0.3  # Always same fallback confidence
+        
+        # Test execute method
+        result = strategy.execute("test keywords", context)
+        assert isinstance(result, StrategyResult)
+        assert result.strategy_used == SearchStrategy.KEYWORD_FALLBACK
+
+
+class TestSearchStrategiesInternalMethods:
+    """Test internal helper methods"""
+    
+    def test_extract_temporal_expressions(self, search_strategies):
+        """Test temporal expression extraction"""
+        temporal_exprs = search_strategies._extract_temporal_expressions(
+            "What did I think about AI last week and yesterday?"
+        )
+        
+        assert len(temporal_exprs) > 0
+        assert any("last" in expr for expr in temporal_exprs)
+        assert any("yesterday" in expr for expr in temporal_exprs)
+    
+    def test_extract_entities(self, search_strategies):
+        """Test entity extraction"""
+        entities = search_strategies._extract_entities("I met John Smith at Google yesterday")
+        
+        # Should find capitalized words
+        assert len(entities) > 0
+        assert ("John" in entities or "Smith" in entities)
+        assert "Google" in entities
+    
+    def test_extract_concepts(self, search_strategies):
+        """Test concept extraction"""
+        concepts = search_strategies._extract_concepts(
+            "I want to learn about machine learning and neural networks"
+        )
+        
+        assert len(concepts) > 0
+        assert "machine" in concepts or "learning" in concepts
+        assert "neural" in concepts or "networks" in concepts
+        # Should filter out stop words
+        assert "and" not in concepts
+        assert "to" not in concepts
+    
+    def test_detect_question_type(self, search_strategies):
+        """Test question type detection"""
+        assert search_strategies._detect_question_type("What is AI?") == "what"
+        assert search_strategies._detect_question_type("When did this happen?") == "when"
+        assert search_strategies._detect_question_type("Where is the file?") == "where"
+        assert search_strategies._detect_question_type("How does this work?") == "how"
+        assert search_strategies._detect_question_type("Why is this important?") == "why"
+        assert search_strategies._detect_question_type("Tell me about AI") is None
+    
+    def test_expand_concepts(self, search_strategies):
+        """Test concept expansion"""
+        expanded = search_strategies._expand_concepts(["ai", "work"], method="semantic", max_expansions=3)
+        
+        assert isinstance(expanded, list)
+        assert len(expanded) <= 3
+        # Should include expansions for known concepts
+        if expanded:
+            assert len(expanded) > 0
+    
+    def test_extract_keywords(self, search_strategies):
+        """Test keyword extraction"""
+        keywords = search_strategies._extract_keywords(
+            "I was thinking about machine learning algorithms",
+            use_stemming=True
+        )
+        
+        assert len(keywords) > 0
+        # Should filter stop words
+        assert "was" not in keywords
+        assert "about" not in keywords
+        # Should include content words
+        assert any(word in keywords for word in ["thinking", "machine", "learning", "algorithm"])
+    
+    def test_score_keyword_match(self, search_strategies):
+        """Test keyword matching and scoring"""
+        content = "This is a document about artificial intelligence and machine learning algorithms"
+        keywords = ["artificial", "intelligence", "learning"]
+        
+        score = search_strategies._score_keyword_match(content, keywords, fuzzy_matching=True)
+        
+        assert 0.0 <= score <= 1.0
+        assert score > 0  # Should find matches
+        
+        # Test with no matches
+        score_no_match = search_strategies._score_keyword_match(
+            "completely unrelated content", 
+            keywords, 
+            fuzzy_matching=False
+        )
+        assert score_no_match == 0.0
+
+
+class TestSearchStrategiesErrorHandling:
+    """Test error handling in search strategies"""
+    
+    def test_graceful_strategy_failure(self, search_strategies, search_context):
+        """Test graceful handling when strategy execution fails"""
+        # Mock a strategy to raise an exception
+        failing_strategy = Mock()
+        failing_strategy.can_handle.return_value = 0.8
+        failing_strategy.execute.side_effect = Exception("Strategy failed")
+        
+        search_strategies.register_strategy(SearchStrategy.SEMANTIC_ROLES, failing_strategy)
+        
+        # Should not crash, should try other strategies
+        result = search_strategies.search_with_strategy_selection("test query", search_context)
+        assert isinstance(result, StrategyResult)
+    
+    def test_empty_query_handling(self, search_strategies, search_context):
+        """Test handling of empty or invalid queries"""
+        result = search_strategies.search_with_strategy_selection("", search_context)
+        assert isinstance(result, StrategyResult)
+        
+        result2 = search_strategies.search_with_strategy_selection("   ", search_context)
+        assert isinstance(result2, StrategyResult)
+    
+    def test_analysis_error_handling(self, search_strategies, search_context):
+        """Test error handling in query analysis"""
+        # Should handle weird characters or malformed input gracefully
+        analysis = search_strategies.analyze_query("query with émojis 🤖 and symbols $#@!", search_context)
+        assert isinstance(analysis, QueryAnalysis)
