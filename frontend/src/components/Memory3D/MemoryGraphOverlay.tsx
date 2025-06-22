@@ -27,17 +27,44 @@ const OverlayMemoryNode: React.FC<{
           width: nodeData.size,
           height: nodeData.size,
           borderRadius: halfSize,
-          backgroundColor: nodeData.color,
+          backgroundColor: 'transparent', // Make main container transparent
           borderColor: nodeData.color,
           borderWidth: 0,
-          opacity: nodeData.glowIntensity,
-          shadowColor: nodeData.color,
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: nodeData.glowIntensity * 0.8,
-          shadowRadius: nodeData.size * nodeData.glowIntensity * 0.8,
         },
       ]}
     >
+      {/* Soft outer glow for overlay - subtle */}
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            borderRadius: halfSize,
+            backgroundColor: nodeData.color,
+            opacity: Math.max(0.1, nodeData.glowIntensity * 0.2),
+            shadowColor: nodeData.color,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.6,
+            shadowRadius: nodeData.size * 0.4,
+            transform: [{ scale: 1.15 }],
+          },
+        ]}
+      />
+      
+      {/* Main solid core for overlay - more prominent */}
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            borderRadius: halfSize,
+            backgroundColor: nodeData.color,
+            opacity: Math.max(0.6, nodeData.glowIntensity),
+            shadowColor: nodeData.color,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.3,
+            shadowRadius: nodeData.size * 0.2,
+          },
+        ]}
+      />
       {/* Access type indicator for overlay - larger and more visible */}
       {nodeData.isRecentlyAccessed && nodeData.accessType && (
         <View
