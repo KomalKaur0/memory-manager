@@ -66,6 +66,10 @@ class MemoryNode(BaseModel):
         for connection in self.connections.values():
             connection.weight = max(0.0, connection.weight - decay_factor)
     
+    def update_access(self):
+        '''Update access count when node is accessed'''
+        self.access_count += 1
+    
     def get_strongest_connections(self, limit: int = 10) -> List[Connection]:
         '''Get connections ordered by weight (strongest first)'''
         return sorted(
