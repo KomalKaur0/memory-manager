@@ -164,7 +164,8 @@ async def update_memory_node(
         embedding = await hybrid_retriever.embedding_search.get_embedding(
             f"{node_data.concept} {node_data.summary} {node_data.content}"
         )
-        existing_node.embedding = embedding
+        # Store embedding in the embedding search service
+        hybrid_retriever.embedding_search.store_embedding(node_id, embedding)
         
         return _convert_node_to_response(existing_node)
         
@@ -209,6 +210,8 @@ async def create_connection(
             raise HTTPException(status_code=400, detail="Failed to create connection - nodes may not exist")
             
         return {"message": "Connection created successfully"}
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid connection type: {e}")
     except Exception as e:
@@ -318,12 +321,17 @@ async def _auto_connect_node(node_id: str, memory_graph: MemoryGraph, hybrid_ret
     """Automatically connect a new node to similar existing nodes"""
     try:
         node = memory_graph.get_node(node_id)
-        if not node or not node.embedding:
+        if not node:
             return
+        
+        # Get node embedding from the service
+        embedding = await hybrid_retriever.embedding_search.get_embedding(
+            f"{node.concept} {node.summary} {node.full_content}"
+        )
         
         # Find similar nodes using embedding similarity
         similar_results = await hybrid_retriever.embedding_search.find_similar(
-            node.embedding, 
+            embedding, 
             k=5, 
             threshold=0.7
         )
@@ -332,10 +340,10 @@ async def _auto_connect_node(node_id: str, memory_graph: MemoryGraph, hybrid_ret
             if similar_id != node_id and similar_id in memory_graph.nodes:
                 # Create bidirectional connections
                 memory_graph.create_connection(
-                    node_id, similar_id, ConnectionType.SEMANTIC, similarity * 0.5
+                    node_id, similar_id, ConnectionType.SIMILARITY, similarity * 0.5
                 )
                 memory_graph.create_connection(
-                    similar_id, node_id, ConnectionType.SEMANTIC, similarity * 0.5
+                    similar_id, node_id, ConnectionType.SIMILARITY, similarity * 0.5
                 )
         
     except Exception as e:

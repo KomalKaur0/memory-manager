@@ -5,12 +5,23 @@ import pytest
 import asyncio
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock, patch
+import os
 
-from main import app
+# Set environment variables before importing app
+os.environ['VOYAGER_LITE_API_KEY'] = 'test-api-key'
+os.environ['CLAUDE_API_KEY'] = 'test-claude-key'
+
 from src.core.memory_graph import MemoryGraph
 from src.core.memory_node import MemoryNode, ConnectionType
 from src.retrieval.embedding_search import EmbeddingSearch
 from src.retrieval.hybrid_retriever import HybridRetriever
+
+# Import app components separately to avoid startup
+from fastapi import FastAPI
+from src.api.memory_api import memory_router
+from src.api.search_api import search_router
+from src.api.admin_api import admin_router
+from src.api.chat_api import chat_router
 
 # Test fixtures
 @pytest.fixture
@@ -22,22 +33,22 @@ def mock_memory_graph():
     node1 = MemoryNode(
         concept="Test Concept 1",
         summary="Test summary 1",
-        content="Test content 1",
+        full_content="Test content 1",
         tags=["test", "memory"],
         keywords=["test", "concept"]
     )
     node1.id = "test-node-1"
-    node1.embedding = [0.1] * 384  # Mock embedding
+    node1.embedding_id = "test-embedding-1"  # Mock embedding ID
     
     node2 = MemoryNode(
         concept="Test Concept 2", 
         summary="Test summary 2",
-        content="Test content 2",
+        full_content="Test content 2",
         tags=["test", "graph"],
         keywords=["test", "graph"]
     )
     node2.id = "test-node-2"
-    node2.embedding = [0.2] * 384
+    node2.embedding_id = "test-embedding-2"  # Mock embedding ID
     
     graph.nodes = {
         "test-node-1": node1,
@@ -45,17 +56,21 @@ def mock_memory_graph():
     }
     
     # Add connection
-    graph.create_connection("test-node-1", "test-node-2", ConnectionType.SEMANTIC, 0.8)
+    graph.create_connection("test-node-1", "test-node-2", ConnectionType.SIMILARITY, 0.8)
     
     return graph
 
 @pytest.fixture
 def mock_embedding_search():
     """Create a mock embedding search service"""
-    mock = AsyncMock(spec=EmbeddingSearch)
-    mock.get_embedding.return_value = [0.5] * 384
-    mock.find_similar.return_value = [("test-node-2", 0.85)]
-    mock.is_ready.return_value = True
+    mock = MagicMock(spec=EmbeddingSearch)
+    # Set up async methods
+    mock.get_embedding = AsyncMock(return_value=[0.5] * 384)
+    mock.find_similar = AsyncMock(return_value=[("test-node-2", 0.85)])
+    mock.search_by_text = AsyncMock(return_value=[("test-node-2", 0.85)])
+    mock.is_ready = MagicMock(return_value=True)
+    mock.initialize = AsyncMock()
+    mock.store_embedding = MagicMock()
     return mock
 
 @pytest.fixture
@@ -64,18 +79,56 @@ def mock_hybrid_retriever(mock_memory_graph, mock_embedding_search):
     mock = MagicMock(spec=HybridRetriever)
     mock.memory_graph = mock_memory_graph
     mock.embedding_search = mock_embedding_search
+    
+    # Mock the search_memories method
+    async def mock_search_memories(query, max_results=10, use_graph_expansion=True):
+        return [
+            {
+                'node': mock_memory_graph.get_node("test-node-2").dict(),
+                'score': 0.85,
+                'source': 'embedding'
+            }
+        ]
+    
+    mock.search_memories = AsyncMock(side_effect=mock_search_memories)
     return mock
 
 @pytest.fixture
-def test_client(mock_memory_graph, mock_embedding_search, mock_hybrid_retriever):
-    """Create test client with mocked dependencies"""
+def test_app(mock_memory_graph, mock_embedding_search, mock_hybrid_retriever):
+    """Create test app with mocked dependencies"""
+    # Create a test app without lifespan
+    test_app = FastAPI()
     
-    # Override the app state with mocks
-    app.state.memory_graph = mock_memory_graph
-    app.state.embedding_search = mock_embedding_search
-    app.state.hybrid_retriever = mock_hybrid_retriever
+    # Include routers
+    test_app.include_router(memory_router, prefix="/api/memory", tags=["memory"])
+    test_app.include_router(search_router, prefix="/api/search", tags=["search"])
+    test_app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
+    test_app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
     
-    with TestClient(app) as client:
+    # Add health check endpoint
+    @test_app.get("/health")
+    async def health_check():
+        return {
+            "status": "healthy",
+            "components": {
+                "memory_graph": True,
+                "embedding_search": True,
+                "hybrid_retriever": True
+            }
+        }
+    
+    # Set up app state
+    test_app.state.memory_graph = mock_memory_graph
+    test_app.state.embedding_search = mock_embedding_search
+    test_app.state.hybrid_retriever = mock_hybrid_retriever
+    test_app.state.claude_client = MagicMock()
+    
+    return test_app
+
+@pytest.fixture
+def test_client(test_app):
+    """Create test client from test app"""
+    with TestClient(test_app) as client:
         yield client
 
 class TestMemoryAPI:
@@ -205,7 +258,7 @@ class TestMemoryAPI:
         connection_data = {
             "source_id": "test-node-1",
             "target_id": "test-node-2", 
-            "connection_type": "semantic",
+            "connection_type": "similarity",
             "initial_weight": 0.7
         }
         
@@ -219,7 +272,7 @@ class TestMemoryAPI:
         connection_data = {
             "source_id": "nonexistent-1",
             "target_id": "nonexistent-2",
-            "connection_type": "semantic",
+            "connection_type": "similarity",
             "initial_weight": 0.5
         }
         
@@ -291,7 +344,7 @@ class TestMemoryAPIValidation:
         connection_data = {
             "source_id": "test-node-1",
             "target_id": "test-node-2",
-            "connection_type": "semantic",
+            "connection_type": "similarity",
             "initial_weight": 1.5  # Invalid weight > 1.0
         }
         

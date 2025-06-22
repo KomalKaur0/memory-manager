@@ -13,6 +13,7 @@ class ConnectionType(str, Enum):
     SIMILARITY = "similarity"
     CONTRAST = "contrast"
     CONTEXT = "context"
+    CO_ACCESS = "co_access"  # Connection created from usage patterns
 
 class Connection(BaseModel):
     target_node_id: str

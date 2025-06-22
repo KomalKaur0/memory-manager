@@ -19,6 +19,7 @@ from src.core.memory_graph import MemoryGraph
 from src.retrieval.embedding_search_mock import EmbeddingSearch
 from src.retrieval.hybrid_retriever_simple import HybridRetriever
 from src.agents.relevance_agent import get_claude_client_from_env
+from src.agents.connection_agent import ConnectionAgent
 from src.retrieval.embedding_search import get_embedding_config_from_env
 
 # Load environment variables from .env file
@@ -53,6 +54,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         embedding_search=embedding_search
     )
     
+    # Initialize connection agent for co-access tracking
+    connection_agent = ConnectionAgent(memory_graph=memory_graph)
+    
     # Initialize Claude client with API key from .env
     claude_client = get_claude_client_from_env()
     
@@ -60,6 +64,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     app.state.memory_graph = memory_graph
     app.state.embedding_search = embedding_search
     app.state.hybrid_retriever = hybrid_retriever
+    app.state.connection_agent = connection_agent
+    app.state.claude_client = claude_client
     
     logger.info("AI Memory System initialized successfully")
     

@@ -228,7 +228,7 @@ class ConnectionAgent:
             relevance_score = relevance_scores[i] if relevance_scores and i < len(relevance_scores) else 0.5
             
             # Consider memory helpful if it has good relevance score
-            if relevance_score >= 0.4:  # Lower threshold than individual helpfulness
+            if relevance_score >= 0.3:  # Lowered threshold for more co-access connections
                 helpful_memories.append((memory_id, relevance_score))
         
         # Create connections between all pairs of helpful memories
