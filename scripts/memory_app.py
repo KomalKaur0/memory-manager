@@ -8,22 +8,38 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from datetime import datetime
+# from datetime import datetime
 from ..src.core.memory_node import MemoryNode
 from ..src.core.memory_graph import MemoryGraph
 from ..src.storage.graph_database import MemoryGraphDatabase
 from ..src.storage.vector_store import MemoryVectorStore
-from ..src.retrieval.hybrid_retriever import HybridRetriever
+from ..src.retrieval.hybrid_retriever import HybridRetriever, RetrievalConfig, RetrievalResult
 from ..src.agents.filter_agent import FilterAgent
+from ..src.retrieval.embedding_search import EmbeddingSearch, EmbeddingConfig
+from ..src.retrieval.graph_traversal import GraphTraversal, TraversalConfig
 
 class SimpleMemoryApp:
     def __init__(self):
         print("🧠 Initializing AI Memory System...")
         try:
-            self.graph_db = MemoryGraphDatabase()
-            self.vector_store = MemoryVectorStore()
-            self.memory_graph = MemoryGraph(self.graph_db, self.vector_store)
-            self.retriever = HybridRetriever(self.memory_graph)
+            #TODO: fill in these things
+            u = ''
+            user = ''
+            pw = ''
+            self.graph_db = MemoryGraphDatabase(uri=u, username=user, password=pw)
+            w_url = ''
+            w_api_key = ''
+            em = ''
+            self.vector_store = MemoryVectorStore(weaviate_url = w_url, 
+                                                  weaviate_api_key = w_api_key, 
+                                                  embedding_model = em)
+            self.memory_graph = MemoryGraph(0.01)
+            self.ec = EmbeddingConfig()
+            self.retreival_config = RetrievalConfig()
+            self.es = EmbeddingSearch(self.ec, self.vector_store)
+            self.traversal_config = TraversalConfig()
+            self.gt = GraphTraversal(self.memory_graph, self.traversal_config)
+            self.retriever = HybridRetriever(self.es, self.gt, self.memory_graph, self.retreival_config)
             self.filter_agent = FilterAgent()
             
             # Connect to databases
@@ -65,7 +81,7 @@ class SimpleMemoryApp:
             print(f"🔍 Searching for: '{query}'")
             
             # Get results from retriever
-            results = self.retriever.search(query, max_results=max_results * 2)
+            results = self.retriever.retrieve(query, max_results=max_results * 2)
             
             if not results:
                 print("No memories found.")
@@ -73,14 +89,14 @@ class SimpleMemoryApp:
             
             # Simple filtering (without AI agent for now)
             # Just take the top results
-            filtered_results = results[:max_results]
+            filtered_results = results.memories
             
-            print(f"\n📚 Found {len(filtered_results)} relevant memories:")
-            for i, memory in enumerate(filtered_results, 1):
-                print(f"\n{i}. {memory.concept}")
-                if memory.tags:
-                    print(f"   Tags: {', '.join(memory.tags)}")
-                print(f"   Summary: {memory.summary}")
+            # print(f"\n📚 Found {len(filtered_results)} relevant memories:")
+            # for i, memory in enumerate(filtered_results, 1):
+            #     print(f"\n{i}. {memory.concept}")
+            #     if memory.tags:
+            #         print(f"   Tags: {', '.join(memory.tags)}")
+            #     print(f"   Summary: {memory.summary}")
                 
             return filtered_results
             

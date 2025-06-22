@@ -159,7 +159,7 @@ class ConnectionAgent:
         
         for recent_event in recent_accesses:
             if recent_event.memory_id != event.memory_id:
-                pair = tuple(sorted([event.memory_id, recent_event.memory_id]))
+                pair = tuple(sorted([str(event.memory_id), str(recent_event.memory_id)]))
                 self.co_access_patterns[pair] += 1
     
     def record_co_access_with_feedback(
@@ -748,7 +748,7 @@ class ConnectionAgent:
         
         # Co-access patterns
         pair_key = tuple(sorted([source_memory.id, target_memory.id]))
-        factors['co_access_frequency'] = min(1.0, self.co_access_patterns.get(pair_key, 0) / 5.0)
+        factors['co_access_frequency'] = min(1.0, self.co_access_patterns.get(pair_key) / 5.0)
         
         # Recency of access
         recent_accesses = [e for e in self.access_history[-50:] if e.memory_id in [source_memory.id, target_memory.id]]
@@ -803,7 +803,7 @@ class ConnectionAgent:
         
         return reason
     
-    def get_connection_statistics(self) -> Dict[str, any]:
+    def get_connection_statistics(self) -> Dict:
         """Get statistics about connection patterns and suggestions."""
         stats = {
             'total_access_events': len(self.access_history),
@@ -814,6 +814,6 @@ class ConnectionAgent:
         }
         
         if self.memory_graph.nodes:
-            stats['average_connections_per_node'] = stats['total_connections'] / len(self.memory_graph.nodes)
+            stats['average_connections_per_node'] = stats['total_connections'] // len(self.memory_graph.nodes)
         
         return stats

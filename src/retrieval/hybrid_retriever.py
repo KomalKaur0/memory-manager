@@ -8,7 +8,7 @@ retrieval process and provides unified, ranked results with explanations.
 
 from typing import List, Dict, Optional, Tuple, Any, Union, Set
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+# from datetime import datetime, timedelta
 from enum import Enum
 import logging
 from abc import ABC, abstractmethod
@@ -34,7 +34,7 @@ class RetrievalContext:
     user_id: Optional[str] = None
     conversation_history: List[str] = field(default_factory=list)
     current_memories: List[str] = field(default_factory=list)
-    time_context: Optional[datetime] = None
+    # time_context: Optional[datetime] = None
     location_context: Optional[str] = None
     tags_filter: List[str] = field(default_factory=list)
     semantic_filters: Dict[str, Any] = field(default_factory=dict)
@@ -286,7 +286,7 @@ class HybridRetriever:
             self._cache_result(cache_key, result)
             
             # Record metrics
-            self._record_retrieval_metrics(start_time, result)
+            # self._record_retrieval_metrics(start_time, result)
             
             return result
             
@@ -297,7 +297,7 @@ class HybridRetriever:
     def retrieve_contextual(self,
                            query: str,
                            conversation_history: List[str],
-                           current_memory_ids: List[str] = None,
+                           current_memory_ids: List[str],
                            **kwargs) -> RetrievalResult:
         """
         Context-aware retrieval using conversation history and current state.
@@ -352,37 +352,37 @@ class HybridRetriever:
         mode = RetrievalMode.STANDARD if include_graph_connections else RetrievalMode.EMBEDDING_ONLY
         return self.retrieve(memory_content, context, mode)
     
-    def retrieve_by_time_range(self,
-                              query: str,
-                              start_time: datetime,
-                              end_time: datetime,
-                              temporal_weight: float = 0.3) -> RetrievalResult:
-        """
-        Retrieve memories within a specific time range.
+    # def retrieve_by_time_range(self,
+    #                           query: str,
+    #                           start_time: datetime,
+    #                           end_time: datetime,
+    #                           temporal_weight: float = 0.3) -> RetrievalResult:
+    #     """
+    #     Retrieve memories within a specific time range.
         
-        Combines semantic search with temporal filtering,
-        useful for "What did I think about X last week?" queries.
+    #     Combines semantic search with temporal filtering,
+    #     useful for "What did I think about X last week?" queries.
         
-        Args:
-            query: Search query
-            start_time: Start of time range
-            end_time: End of time range
-            temporal_weight: How much to weight temporal relevance
+    #     Args:
+    #         query: Search query
+    #         start_time: Start of time range
+    #         end_time: End of time range
+    #         temporal_weight: How much to weight temporal relevance
             
-        Returns:
-            Time-filtered retrieval results
-        """
-        context = RetrievalContext(
-            query=query,
-            time_context=start_time,
-            semantic_filters={
-                "start_time": start_time,
-                "end_time": end_time,
-                "temporal_weight": temporal_weight
-            }
-        )
+    #     Returns:
+    #         Time-filtered retrieval results
+    #     """
+    #     context = RetrievalContext(
+    #         query=query,
+    #         time_context=start_time,
+    #         semantic_filters={
+    #             "start_time": start_time,
+    #             "end_time": end_time,
+    #             "temporal_weight": temporal_weight
+    #         }
+    #     )
         
-        return self.retrieve(query, context)
+    #     return self.retrieve(query, context)
     
     def retrieve_connected_cluster(self,
                                   seed_memory_ids: List[str],
@@ -778,12 +778,12 @@ class HybridRetriever:
         self.result_filters = [f for f in self.result_filters if not isinstance(f, filter_class)]
         return len(self.result_filters) < original_length
     
-    def add_custom_scorer(self, 
-                         name: str, 
-                         scorer_func: callable,
-                         weight: float = 1.0) -> None:
-        """Add a custom scoring function to the retrieval pipeline."""
-        self.custom_scorers[name] = {"func": scorer_func, "weight": weight}
+    # def add_custom_scorer(self, 
+    #                      name: str, 
+    #                      scorer_func: callable,
+    #                      weight: float = 1.0) -> None:
+    #     """Add a custom scoring function to the retrieval pipeline."""
+    #     self.custom_scorers[name] = {"func": scorer_func, "weight": weight}
     
     def get_retrieval_statistics(self) -> RetrievalStats:
         """Get comprehensive retrieval statistics."""
@@ -847,19 +847,19 @@ class HybridRetriever:
         key_string = "|".join(key_components)
         return hashlib.md5(key_string.encode()).hexdigest()
     
-    def _record_retrieval_metrics(self,
-                                start_time: float,
-                                result: RetrievalResult) -> None:
-        """Record metrics for this retrieval operation."""
-        self.stats.total_retrievals += 1
-        self.stats.avg_retrieval_time = (
-            (self.stats.avg_retrieval_time * (self.stats.total_retrievals - 1) + result.retrieval_time) /
-            self.stats.total_retrievals
-        )
-        self.stats.avg_results_returned = (
-            (self.stats.avg_results_returned * (self.stats.total_retrievals - 1) + len(result.memories)) /
-            self.stats.total_retrievals
-        )
+    # def _record_retrieval_metrics(self,
+    #                             start_time: float,
+    #                             result: RetrievalResult) -> None:
+    #     """Record metrics for this retrieval operation."""
+    #     self.stats.total_retrievals += 1
+    #     self.stats.avg_retrieval_time = (
+    #         (self.stats.avg_retrieval_time * (self.stats.total_retrievals - 1) + result.retrieval_time) /
+    #         self.stats.total_retrievals
+    #     )
+    #     self.stats.avg_results_returned = (
+    #         (self.stats.avg_results_returned * (self.stats.total_retrievals - 1) + len(result.memories)) /
+    #         self.stats.total_retrievals
+    #     )
 
 
 # Exception classes for hybrid retrieval
@@ -900,35 +900,35 @@ class RecencyFilter(ResultFilter):
     def __init__(self, max_age_days: Optional[int] = None):
         self.max_age_days = max_age_days
     
-    def filter(self,
-              candidates: List[MemoryCandidate],
-              context: RetrievalContext) -> List[MemoryCandidate]:
-        """Filter by memory age"""
-        if self.max_age_days is None:
-            return candidates
+    # def filter(self,
+    #           candidates: List[MemoryCandidate],
+    #           context: RetrievalContext) -> List[MemoryCandidate]:
+    #     """Filter by memory age"""
+    #     if self.max_age_days is None:
+    #         return candidates
         
-        cutoff_time = datetime.now() - timedelta(days=self.max_age_days)
-        filtered = []
+    #     cutoff_time = datetime.now() - timedelta(days=self.max_age_days)
+    #     filtered = []
         
-        for candidate in candidates:
-            # Check if memory has timestamp in metadata
-            created_time = candidate.metadata.get("created_at")
-            if created_time:
-                if isinstance(created_time, str):
-                    created_time = datetime.fromisoformat(created_time)
-                if created_time >= cutoff_time:
-                    filtered.append(candidate)
-            else:
-                # Include if no timestamp available
-                filtered.append(candidate)
+    #     for candidate in candidates:
+    #         # Check if memory has timestamp in metadata
+    #         created_time = candidate.metadata.get("created_at")
+    #         if created_time:
+    #             if isinstance(created_time, str):
+    #                 created_time = datetime.fromisoformat(created_time)
+    #             if created_time >= cutoff_time:
+    #                 filtered.append(candidate)
+    #         else:
+    #             # Include if no timestamp available
+    #             filtered.append(candidate)
         
-        return filtered
+    #     return filtered
 
 
 class TagFilter(ResultFilter):
     """Filter memories based on tag requirements"""
     
-    def __init__(self, required_tags: List[str] = None, excluded_tags: List[str] = None):
+    def __init__(self, required_tags: List[str], excluded_tags: List[str]):
         self.required_tags = required_tags or []
         self.excluded_tags = excluded_tags or []
     
