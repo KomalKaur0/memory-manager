@@ -166,7 +166,7 @@ export const MemoryVisualizationScreen: React.FC = () => {
         </View>
         <View style={styles.stat}>
           <Text style={styles.statValue}>
-            {Object.values(nodes).reduce((sum, node) => sum + Object.keys(node.connections).length, 0)}
+            {Object.values(nodes).reduce((sum, node) => sum + Object.keys(node.connections || {}).length, 0)}
           </Text>
           <Text style={styles.statLabel}>Connections</Text>
         </View>
@@ -228,7 +228,7 @@ export const MemoryVisualizationScreen: React.FC = () => {
                 <View style={styles.detailSection}>
                   <Text style={styles.sectionTitle}>Tags</Text>
                   <View style={styles.tagsContainer}>
-                    {selectedNodeData.tags.map((tag, index) => (
+                    {(selectedNodeData.tags || []).map((tag, index) => (
                       <View key={index} style={styles.tag}>
                         <Text style={styles.tagText}>{tag}</Text>
                       </View>
@@ -238,13 +238,13 @@ export const MemoryVisualizationScreen: React.FC = () => {
 
                 <View style={styles.detailSection}>
                   <Text style={styles.sectionTitle}>Content</Text>
-                  <Text style={styles.contentText}>{selectedNodeData.content}</Text>
+                  <Text style={styles.contentText}>{selectedNodeData.content || 'No content available'}</Text>
                 </View>
 
                 <View style={styles.detailSection}>
-                  <Text style={styles.sectionTitle}>Concepts</Text>
+                  <Text style={styles.sectionTitle}>Keywords</Text>
                   <Text style={styles.conceptsText}>
-                    {selectedNodeData.concepts.join(', ')}
+                    {selectedNodeData.keywords?.join(', ') || 'No keywords'}
                   </Text>
                 </View>
 
@@ -252,28 +252,31 @@ export const MemoryVisualizationScreen: React.FC = () => {
                   <Text style={styles.sectionTitle}>Statistics</Text>
                   <View style={styles.statsGrid}>
                     <View style={styles.statItem}>
-                      <Text style={styles.statItemValue}>{selectedNodeData.access_count}</Text>
+                      <Text style={styles.statItemValue}>{selectedNodeData.access_count || 0}</Text>
                       <Text style={styles.statItemLabel}>Access Count</Text>
                     </View>
                     <View style={styles.statItem}>
                       <Text style={styles.statItemValue}>
-                        {Object.keys(selectedNodeData.connections).length}
+                        {Object.keys(selectedNodeData.connections || {}).length}
                       </Text>
                       <Text style={styles.statItemLabel}>Connections</Text>
                     </View>
                     <View style={styles.statItem}>
                       <Text style={styles.statItemValue}>
-                        {getTimeSinceAccess(selectedNodeData.last_accessed)}
+                        {selectedNodeData.last_accessed ? 
+                          getTimeSinceAccess(selectedNodeData.last_accessed) : 
+                          'Never'
+                        }
                       </Text>
                       <Text style={styles.statItemLabel}>Last Access</Text>
                     </View>
                   </View>
                 </View>
 
-                {Object.keys(selectedNodeData.connections).length > 0 && (
+                {Object.keys(selectedNodeData.connections || {}).length > 0 && (
                   <View style={styles.detailSection}>
                     <Text style={styles.sectionTitle}>Connections</Text>
-                    {Object.entries(selectedNodeData.connections).map(([targetId, connection]) => {
+                    {Object.entries(selectedNodeData.connections || {}).map(([targetId, connection]) => {
                       const targetNode = nodes[targetId];
                       return (
                         <Pressable
@@ -285,7 +288,7 @@ export const MemoryVisualizationScreen: React.FC = () => {
                             {targetNode?.summary || `Node ${targetId}`}
                           </Text>
                           <Text style={styles.connectionWeight}>
-                            Weight: {connection.outbound_weight.toFixed(2)}
+                            Weight: {(connection.outbound_weight || connection.weight || 0).toFixed(2)}
                           </Text>
                         </Pressable>
                       );
