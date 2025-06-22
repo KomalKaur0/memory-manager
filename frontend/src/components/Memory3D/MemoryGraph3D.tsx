@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect, useCallback, startTransition } from 'react';
 import { View, StyleSheet, Text, Dimensions, Pressable } from 'react-native';
 import { PanGestureHandler, PinchGestureHandler, State } from 'react-native-gesture-handler';
 import { Feather } from '@expo/vector-icons';
@@ -37,7 +37,7 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
     centerY: height / 2,
   };
 
-  // Camera state with clear separation of concerns
+  // Camera state - single source of truth
   const [camera, setCamera] = useState({
     // World space position (what we're looking at)
     target: { x: 0, y: 0, z: 0 },
@@ -51,14 +51,14 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
     zoom: 1,
   });
 
-  // Gesture state tracking with proper initialization
+  // Gesture state tracking - capture start state
   const gestureStateRef = useRef({
-    panStart: { x: 0, y: 0 },
-    rotationStart: { azimuth: 0, elevation: 0 },
-    targetStart: { x: 0, y: 0, z: 0 },
-    zoomStart: 1,
-    isPanning: false,
-    isActive: false,
+    lastTranslationX: 0,
+    lastTranslationY: 0,
+    accumulatedAzimuth: 0,    // Total accumulated rotation
+    accumulatedElevation: 0,  // Total accumulated rotation
+    lastPinchScale: 1,
+    frameCount: 0,
   });
 
   // Refs for gesture handlers
@@ -223,102 +223,87 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
     });
   };
 
-  // Handle pan gestures for rotation or panning
+  // Handle pan gestures for rotation - using delta approach
   const onPanGestureEvent = (event: any) => {
-    const { translationX, translationY, numberOfPointers, state } = event.nativeEvent;
+    const { translationX, translationY } = event.nativeEvent;
     
-    if (numberOfPointers === 1) {
-      // One finger = rotate camera around target
-      if (state === State.BEGAN) {
-        gestureStateRef.current.rotationStart = { 
-          azimuth: camera.spherical.azimuth,
-          elevation: camera.spherical.elevation 
-        };
-        gestureStateRef.current.isPanning = false;
-        gestureStateRef.current.isActive = true;
-      }
+    // Calculate frame-to-frame delta
+    const deltaX = translationX - gestureStateRef.current.lastTranslationX;
+    const deltaY = translationY - gestureStateRef.current.lastTranslationY;
+    
+    // Detect new gesture by large jump in translation or reset to near zero
+    const isNewGesture = Math.abs(deltaX) > 20 || Math.abs(deltaY) > 20 ||
+                        (Math.abs(translationX) < 5 && Math.abs(translationY) < 5 && 
+                         gestureStateRef.current.frameCount > 5);
+    
+    if (isNewGesture) {
+      // Reset for new gesture
+      gestureStateRef.current.lastTranslationX = translationX;
+      gestureStateRef.current.lastTranslationY = translationY;
+      gestureStateRef.current.accumulatedAzimuth = camera.spherical.azimuth;
+      gestureStateRef.current.accumulatedElevation = camera.spherical.elevation;
+      gestureStateRef.current.frameCount = 0;
       
-      if (state === State.ACTIVE) {
-        const rotationSpeed = 0.005;
-        const newAzimuth = gestureStateRef.current.rotationStart.azimuth - translationX * rotationSpeed;
-        const newElevation = Math.max(
-          -Math.PI / 2 + 0.1,
-          Math.min(
-            Math.PI / 2 - 0.1,
-            gestureStateRef.current.rotationStart.elevation + translationY * rotationSpeed
-          )
-        );
-        
-        setCamera(prev => ({
-          ...prev,
-          spherical: {
-            ...prev.spherical,
-            azimuth: newAzimuth,
-            elevation: newElevation,
-          },
-        }));
-      }
-      
-      if (state === State.END || state === State.CANCELLED) {
-        gestureStateRef.current.isActive = false;
-      }
-      
-    } else if (numberOfPointers === 2) {
-      // Two fingers = pan target position
-      if (state === State.BEGAN) {
-        gestureStateRef.current.targetStart = { 
-          x: camera.target.x,
-          y: camera.target.y,
-          z: camera.target.z 
-        };
-        gestureStateRef.current.isPanning = true;
-        gestureStateRef.current.isActive = true;
-      }
-      
-      if (state === State.ACTIVE) {
-        const { azimuth } = camera.spherical;
-        
-        // Get camera right and up vectors for panning
-        const rightX = Math.cos(azimuth);
-        const rightZ = -Math.sin(azimuth);
-        
-        const panSpeed = 0.5;
-        const panX = -translationX * panSpeed * rightX;
-        const panZ = -translationX * panSpeed * rightZ;
-        const panY = translationY * panSpeed;
-        
-        setCamera(prev => ({
-          ...prev,
-          target: {
-            x: gestureStateRef.current.targetStart.x + panX,
-            y: gestureStateRef.current.targetStart.y + panY,
-            z: gestureStateRef.current.targetStart.z + panZ,
-          },
-        }));
-      }
-      
-      if (state === State.END || state === State.CANCELLED) {
-        gestureStateRef.current.isPanning = false;
-        gestureStateRef.current.isActive = false;
-      }
+      console.log('🎯 New gesture detected:', {
+        translation: { x: translationX, y: translationY },
+        camera: { 
+          azimuth: camera.spherical.azimuth.toFixed(3), 
+          elevation: camera.spherical.elevation.toFixed(3) 
+        }
+      });
+      return;
     }
+    
+    // Apply incremental rotation
+    const rotationSpeed = 0.008;
+    const azimuthDelta = -deltaX * rotationSpeed;
+    const elevationDelta = deltaY * rotationSpeed;
+    
+    // Update accumulated rotation
+    gestureStateRef.current.accumulatedAzimuth += azimuthDelta;
+    gestureStateRef.current.accumulatedElevation = Math.max(
+      -Math.PI / 2 + 0.1,
+      Math.min(
+        Math.PI / 2 - 0.1,
+        gestureStateRef.current.accumulatedElevation + elevationDelta
+      )
+    );
+    
+    // Apply to camera
+    setCamera(prev => ({
+      ...prev,
+      spherical: {
+        ...prev.spherical,
+        azimuth: gestureStateRef.current.accumulatedAzimuth,
+        elevation: gestureStateRef.current.accumulatedElevation,
+      },
+    }));
+    
+    // Update last position for next frame
+    gestureStateRef.current.lastTranslationX = translationX;
+    gestureStateRef.current.lastTranslationY = translationY;
+    gestureStateRef.current.frameCount++;
   };
 
-  // Handle pinch gestures for zoom
+  // Handle pinch gestures for zoom - delta based (no acceleration)
   const onPinchGestureEvent = (event: any) => {
     const { scale, state } = event.nativeEvent;
     
     if (state === State.BEGAN) {
-      gestureStateRef.current.zoomStart = camera.zoom;
+      gestureStateRef.current.lastPinchScale = scale;
     }
     
     if (state === State.ACTIVE) {
-      const newZoom = gestureStateRef.current.zoomStart * scale;
-      const clampedZoom = Math.max(0.3, Math.min(5, newZoom));
+      // Calculate scale delta since last frame
+      const deltaScale = scale - gestureStateRef.current.lastPinchScale;
+      gestureStateRef.current.lastPinchScale = scale;
+      
+      // Apply zoom delta directly to current values
+      const zoomSpeed = 0.5;
       
       setCamera(prev => ({
         ...prev,
-        zoom: clampedZoom,
+        zoom: Math.max(0.3, Math.min(5, prev.zoom + deltaScale * zoomSpeed)),
       }));
     }
   };
@@ -363,6 +348,7 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
     
     return positions;
   }, [nodes]);
+
 
   // Smoothly transition camera to focus on selected node
   const animationRef = useRef<number>();
@@ -576,9 +562,25 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
         const endScreen = project3DToScreen(endPos);
         if (!endScreen) return;
         
-        // Both endpoints must be visible
-        const isVisible = startScreen.isVisible && endScreen.isVisible;
+        // Show connection if at least one endpoint is visible
+        const isVisible = startScreen.isVisible || endScreen.isVisible;
         if (!isVisible) return;
+        
+        // If one node is off-screen, clamp its position to screen edge for line drawing
+        let x1 = startScreen.x;
+        let y1 = startScreen.y;
+        let x2 = endScreen.x;
+        let y2 = endScreen.y;
+        
+        // Clamp off-screen coordinates to viewport bounds for visual continuity
+        if (!startScreen.isVisible) {
+          x1 = Math.max(viewport.left, Math.min(viewport.right, x1));
+          y1 = Math.max(viewport.top, Math.min(viewport.bottom, y1));
+        }
+        if (!endScreen.isVisible) {
+          x2 = Math.max(viewport.left, Math.min(viewport.right, x2));
+          y2 = Math.max(viewport.top, Math.min(viewport.bottom, y2));
+        }
         
         const weight = connection.outbound_weight;
         const color = weight > 0.7 ? '#FF6B6B' :
@@ -587,10 +589,10 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
         
         connections.push({
           id: connectionId,
-          x1: startScreen.x,
-          y1: startScreen.y,
-          x2: endScreen.x,
-          y2: endScreen.y,
+          x1,
+          y1,
+          x2,
+          y2,
           weight,
           color,
           depth: (startScreen.depth + endScreen.depth) / 2,
@@ -618,7 +620,7 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
         onGestureEvent={onPanGestureEvent}
         simultaneousHandlers={pinchRef}
         minPointers={1}
-        maxPointers={2}
+        maxPointers={1}
       >
         <PinchGestureHandler
           ref={pinchRef}

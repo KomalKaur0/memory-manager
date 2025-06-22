@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, ScrollView, Pressable, SafeAreaView, Dimensions } from 'react-native';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { MemoryGraph3D } from '../components/Memory3D/MemoryGraph3D';
 import { useMemoryStore } from '../stores/memoryStore';
 import { Feather } from '@expo/vector-icons';
@@ -7,8 +8,10 @@ import { Feather } from '@expo/vector-icons';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export const MemoryVisualizationScreen: React.FC = () => {
-  const [showDetails, setShowDetails] = useState(false);
-  const [graphSize, setGraphSize] = useState({ width: screenWidth, height: screenHeight * 0.6 });
+  const [detailsEnabled, setDetailsEnabled] = useState(true); // Controls if clicking nodes opens panels
+  const [panelVisible, setPanelVisible] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [graphSize, setGraphSize] = useState({ width: screenWidth, height: screenHeight });
   
   const {
     nodes,
@@ -26,27 +29,28 @@ export const MemoryVisualizationScreen: React.FC = () => {
     }
   }, [generateMockData, nodes]);
 
-  // Update graph size based on details panel visibility
+  // Calculate static graph size (no resize when details panel opens)
   useEffect(() => {
-    // Use more precise height calculations
     const headerHeight = 72; // Header with padding
     const statsHeight = 84; // Stats bar with padding
     const tabBarHeight = 60; // Bottom tab bar
-    const detailsHeight = showDetails ? screenHeight * 0.5 : 0; // Match maxHeight in detailsPanel style
     
-    const totalReservedHeight = headerHeight + statsHeight + tabBarHeight + detailsHeight;
+    const totalReservedHeight = headerHeight + statsHeight + tabBarHeight;
     const availableHeight = screenHeight - totalReservedHeight;
     
     setGraphSize({
       width: screenWidth,
       height: Math.max(200, availableHeight),
     });
-  }, [showDetails]);
+  }, []); // Remove showDetails dependency
 
   const selectedNodeData = selectedNode ? nodes[selectedNode] : null;
 
   const handleNodeSelect = (nodeId: string) => {
-    setShowDetails(true);
+    if (detailsEnabled) {
+      setPanelVisible(true);
+      setIsExpanded(false); // Start with stub when selecting a node
+    }
     // Don't simulate AI access for user clicks - only AI thinking triggers reads
   };
 
@@ -65,6 +69,34 @@ export const MemoryVisualizationScreen: React.FC = () => {
       }, delay);
       delay += 1000;
     });
+  };
+
+  // Handle pan gestures for expanding/collapsing/dismissing panel
+  const handlePanGesture = (event: any) => {
+    // Handle during active gesture if needed
+  };
+
+  const handlePanStateChange = (event: any) => {
+    const { state, translationY } = event.nativeEvent;
+    
+    if (state === State.END) {
+      const expandThreshold = 50; // Minimum distance to trigger expand/collapse
+      const dismissThreshold = 100; // Minimum distance to dismiss
+      
+      if (Math.abs(translationY) > expandThreshold) {
+        if (translationY < -expandThreshold && !isExpanded) {
+          // Swiped up while collapsed - expand
+          setIsExpanded(true);
+        } else if (translationY > expandThreshold && isExpanded) {
+          // Swiped down while expanded - collapse
+          setIsExpanded(false);
+        } else if (translationY > dismissThreshold && !isExpanded) {
+          // Swiped down while collapsed - dismiss completely
+          setPanelVisible(false);
+          setIsExpanded(false);
+        }
+      }
+    }
   };
 
   const getTimeSinceAccess = (timestamp: number): string => {
@@ -90,9 +122,16 @@ export const MemoryVisualizationScreen: React.FC = () => {
           </Pressable>
           <Pressable 
             style={styles.headerButton} 
-            onPress={() => setShowDetails(!showDetails)}
+            onPress={() => {
+              setDetailsEnabled(!detailsEnabled);
+              if (!detailsEnabled) {
+                // If disabling details, hide any open panel
+                setPanelVisible(false);
+                setIsExpanded(false);
+              }
+            }}
           >
-            <Feather name={showDetails ? "eye-off" : "eye"} size={20} color="#007AFF" />
+            <Feather name={detailsEnabled ? "eye" : "eye-off"} size={20} color="#007AFF" />
             <Text style={styles.headerButtonText}>Details</Text>
           </Pressable>
         </View>
@@ -124,30 +163,44 @@ export const MemoryVisualizationScreen: React.FC = () => {
           onNodeSelect={handleNodeSelect}
         />
         
-        {/* Instruction overlay when no details shown */}
-        {!showDetails && !selectedNode && (
-          <View style={styles.instructionOverlay}>
-            <Text style={styles.instructionText}>
-              Tap a node to view details
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Details Panel - Only rendered when visible */}
-      {showDetails && (
-        <View style={styles.detailsPanel}>
-          <View style={styles.detailsHeader}>
-            <Text style={styles.detailsTitle}>
-              {selectedNodeData ? 'Node Details' : 'Select a node to view details'}
-            </Text>
-            <Pressable onPress={() => setShowDetails(false)}>
-              <Feather name="x" size={20} color="#666" />
-            </Pressable>
-          </View>
+        
+        {/* Details Panel Overlay - Only show when enabled and node is selected */}
+        {detailsEnabled && panelVisible && selectedNodeData && (
+          <PanGestureHandler
+            onGestureEvent={handlePanGesture}
+            onHandlerStateChange={handlePanStateChange}
+          >
+            <View style={[styles.detailsOverlay, { height: isExpanded ? screenHeight * 0.6 : 120 }]}>
+              <Pressable 
+                style={styles.detailsHeader}
+                onPress={() => setIsExpanded(!isExpanded)}
+              >
+                <View style={styles.dragHandle}>
+                  <Feather 
+                    name={isExpanded ? "chevron-down" : "chevron-up"} 
+                    size={16} 
+                    color="#8E8E93" 
+                  />
+                </View>
+                <View style={styles.headerContent}>
+                  <Text style={styles.detailsTitle}>
+                    {selectedNodeData.summary}
+                  </Text>
+                </View>
+              </Pressable>
+              
+              <Pressable 
+                style={styles.closeButton}
+                onPress={() => {
+                  setPanelVisible(false);
+                  setIsExpanded(false);
+                }}
+              >
+                <Feather name="x" size={16} color="#666" />
+              </Pressable>
           
-          <ScrollView style={styles.detailsContent}>
-            {selectedNodeData ? (
+          {isExpanded && (
+            <ScrollView style={styles.detailsContent}>
               <View>
                 <Text style={styles.nodeTitle}>{selectedNodeData.summary}</Text>
                 
@@ -219,14 +272,12 @@ export const MemoryVisualizationScreen: React.FC = () => {
                   </View>
                 )}
               </View>
-            ) : (
-              <Text style={styles.noSelectionText}>
-                Tap on a node in the 3D visualization to view its details, connections, and statistics.
-              </Text>
-            )}
-          </ScrollView>
-        </View>
-      )}
+            </ScrollView>
+          )}
+            </View>
+          </PanGestureHandler>
+        )}
+      </View>
     </SafeAreaView>
   );
 };
@@ -296,31 +347,62 @@ const styles = StyleSheet.create({
   },
   visualizationContainer: {
     flex: 1,
-    zIndex: 1,
+    position: 'relative',
   },
-  detailsPanel: {
+  detailsOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     borderTopWidth: 1,
     borderTopColor: '#E5E5EA',
-    maxHeight: screenHeight * 0.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 10,
   },
   detailsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
   },
+  dragHandle: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 4,
+    marginBottom: 4,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingRight: 40, // Make space for close button
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 8,
+    right: 12,
+    padding: 8,
+    zIndex: 20,
+  },
   detailsTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#000',
+    flex: 1,
+    marginRight: 8,
   },
   detailsContent: {
     flex: 1,
     paddingHorizontal: 16,
+    paddingTop: 8,
   },
   nodeTitle: {
     fontSize: 18,
@@ -404,20 +486,5 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingHorizontal: 24,
     lineHeight: 20,
-  },
-  instructionOverlay: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    padding: 12,
-    borderRadius: 8,
-  },
-  instructionText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    textAlign: 'center',
   },
 });
