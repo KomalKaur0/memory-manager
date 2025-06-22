@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend-Backend Connection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Frontend-Backend Connection Test</h1>
+    
+    <div id="status" class="status info">Ready to test...</div>
+    
+    <button onclick="testHealthCheck()">Test Health Check</button>
+    <button onclick="testMemoryNodes()">Test Memory Nodes</button>
+    <button onclick="testChat()">Test Chat</button>
+    <button onclick="clearLogs()">Clear Logs</button>
+    
+    <h2>Logs</h2>
+    <pre id="logs"></pre>
+
+    <script>
+        const BASE_URL = 'http://localhost:8000';
+        const logs = document.getElementById('logs');
+        const status = document.getElementById('status');
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logs.textContent += `[${timestamp}] ${message}\n`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function setStatus(message, type = 'info') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        function clearLogs() {
+            logs.textContent = '';
+            setStatus('Logs cleared', 'info');
+        }
+
+        async function testHealthCheck() {
+            log('🩺 Testing health check...');
+            setStatus('Testing health check...', 'info');
+            
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                log(`📡 Fetching: ${BASE_URL}/health`);
+                const response = await fetch(`${BASE_URL}/health`, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                });
+                
+                clearTimeout(timeoutId);
+                
+                log(`📊 Response status: ${response.status} ${response.statusText}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Health check success: ${JSON.stringify(data)}`);
+                    setStatus('Health check passed!', 'success');
+                } else {
+                    log(`❌ Health check failed: ${response.status}`);
+                    setStatus(`Health check failed: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Health check error: ${error.message}`);
+                setStatus(`Health check error: ${error.message}`, 'error');
+                
+                if (error.name === 'AbortError') {
+                    log('⏰ Request timed out after 5 seconds');
+                }
+            }
+        }
+
+        async function testMemoryNodes() {
+            log('📦 Testing memory nodes endpoint...');
+            setStatus('Testing memory nodes...', 'info');
+            
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                
+                log(`📡 Fetching: ${BASE_URL}/api/memory/nodes`);
+                const response = await fetch(`${BASE_URL}/api/memory/nodes`, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                clearTimeout(timeoutId);
+                
+                log(`📊 Response status: ${response.status} ${response.statusText}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const nodeCount = Object.keys(data).length;
+                    log(`✅ Memory nodes success: ${nodeCount} nodes found`);
+                    log(`📋 Sample data: ${JSON.stringify(data, null, 2).substring(0, 500)}...`);
+                    setStatus(`Memory nodes passed! Found ${nodeCount} nodes`, 'success');
+                } else {
+                    log(`❌ Memory nodes failed: ${response.status}`);
+                    setStatus(`Memory nodes failed: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Memory nodes error: ${error.message}`);
+                setStatus(`Memory nodes error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testChat() {
+            log('💬 Testing chat endpoint...');
+            setStatus('Testing chat...', 'info');
+            
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+                
+                const chatData = {
+                    content: "Hello from frontend test!",
+                    conversation_history: []
+                };
+                
+                log(`📡 Posting to: ${BASE_URL}/api/chat/send`);
+                log(`📤 Request data: ${JSON.stringify(chatData)}`);
+                
+                const response = await fetch(`${BASE_URL}/api/chat/send`, {
+                    method: 'POST',
+                    signal: controller.signal,
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(chatData),
+                });
+                
+                clearTimeout(timeoutId);
+                
+                log(`📊 Response status: ${response.status} ${response.statusText}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Chat success!`);
+                    log(`💬 Response: ${data.message.content.substring(0, 200)}...`);
+                    log(`🧠 Retrieved memories: ${data.retrieved_memories.length}`);
+                    log(`⏱️ Processing time: ${data.processing_time}s`);
+                    setStatus('Chat test passed!', 'success');
+                } else {
+                    const errorText = await response.text();
+                    log(`❌ Chat failed: ${response.status} - ${errorText}`);
+                    setStatus(`Chat failed: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Chat error: ${error.message}`);
+                setStatus(`Chat error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run health check on load
+        window.onload = () => {
+            log('🚀 Frontend-Backend Connection Test Started');
+            setTimeout(testHealthCheck, 1000);
+        };
+    </script>
+</body>
+</html>
