@@ -12,6 +12,7 @@ interface MemoryStore extends MemoryGraphState {
   
   // Mock data methods
   generateMockData: () => void;
+  generateDemoData: () => void;
   simulateMemoryAccess: (nodeId: string, accessType: MemoryAccessEvent['access_type']) => void;
   clearRecentAccesses: () => void;
 }
@@ -150,6 +151,206 @@ const generateMockNodes = (): Record<string, MemoryNode> => {
   return mockNodes;
 };
 
+const generateDemoNodes = (): Record<string, MemoryNode> => {
+  const demoNodes: Record<string, MemoryNode> = {};
+  
+  const nodeData = [
+    {
+      id: 'demo_1',
+      tags: ['personal', 'work', 'productivity'],
+      summary: 'Meeting about quarterly goals and team restructuring',
+      content: 'Attended quarterly planning meeting with Sarah and team. Discussed new OKRs for Q4, potential team expansion, and the new remote work policy. Key takeaway: need to increase customer satisfaction metrics by 15%.',
+      concepts: ['planning', 'goals', 'team', 'metrics', 'satisfaction'],
+      keywords: ['quarterly', 'OKRs', 'team', 'remote', 'satisfaction', 'metrics']
+    },
+    {
+      id: 'demo_2',
+      tags: ['technical', 'AI', 'research'],
+      summary: 'Research on transformer architecture improvements',
+      content: 'Deep dive into latest transformer variants including MoE (Mixture of Experts) models. Found interesting paper on reducing computational overhead while maintaining performance. Could be relevant for our NLP pipeline optimization.',
+      concepts: ['transformers', 'MoE', 'optimization', 'NLP', 'performance'],
+      keywords: ['transformer', 'experts', 'computational', 'performance', 'NLP', 'optimization']
+    },
+    {
+      id: 'demo_3',
+      tags: ['learning', 'course', 'machine_learning'],
+      summary: 'Completed module on reinforcement learning fundamentals',
+      content: 'Finished the RL basics course covering Q-learning, policy gradients, and actor-critic methods. The hands-on CartPole environment was particularly insightful for understanding exploration vs exploitation tradeoffs.',
+      concepts: ['reinforcement_learning', 'Q_learning', 'policy_gradients', 'exploration', 'exploitation'],
+      keywords: ['reinforcement', 'Q-learning', 'policy', 'actor-critic', 'CartPole', 'exploration']
+    },
+    {
+      id: 'demo_4',
+      tags: ['project', 'frontend', 'react'],
+      summary: 'Started new React project with TypeScript and Zustand',
+      content: 'Initialized a new frontend project using React 18, TypeScript, and Zustand for state management. Set up modern development stack with Vite, ESLint, and testing framework. Project will be a collaborative task management tool.',
+      concepts: ['React', 'TypeScript', 'Zustand', 'frontend', 'development'],
+      keywords: ['React', 'TypeScript', 'Zustand', 'Vite', 'ESLint', 'task', 'management']
+    },
+    {
+      id: 'demo_5',
+      tags: ['book', 'psychology', 'learning'],
+      summary: 'Reading "Thinking, Fast and Slow" insights on cognitive biases',
+      content: 'Key insights from Kahneman\'s work on System 1 vs System 2 thinking. Understanding how cognitive shortcuts can lead to systematic errors. Particularly relevant for improving decision-making in product development.',
+      concepts: ['cognitive_biases', 'System_1', 'System_2', 'decision_making', 'psychology'],
+      keywords: ['Kahneman', 'cognitive', 'biases', 'thinking', 'decision', 'shortcuts', 'errors']
+    },
+    {
+      id: 'demo_6',
+      tags: ['health', 'exercise', 'routine'],
+      summary: 'New morning workout routine showing good results',
+      content: 'Started a 30-minute morning routine combining cardio and strength training. Week 3 shows improved energy levels throughout the day and better sleep quality. Planning to add yoga for flexibility.',
+      concepts: ['exercise', 'routine', 'cardio', 'strength', 'energy', 'sleep'],
+      keywords: ['workout', 'morning', 'cardio', 'strength', 'energy', 'sleep', 'yoga', 'flexibility']
+    },
+    {
+      id: 'demo_7',
+      tags: ['cooking', 'recipe', 'italian'],
+      summary: 'Mastered homemade pasta and marinara sauce',
+      content: 'Successfully made fresh pasta from scratch using 00 flour and eggs. The marinara sauce with San Marzano tomatoes, fresh basil, and good olive oil made all the difference. Family loved it!',
+      concepts: ['cooking', 'pasta', 'sauce', 'italian', 'homemade'],
+      keywords: ['pasta', 'flour', 'marinara', 'tomatoes', 'basil', 'olive oil', 'italian', 'homemade']
+    },
+    {
+      id: 'demo_8',
+      tags: ['travel', 'planning', 'vacation'],
+      summary: 'Planning summer trip to Japan for cherry blossom season',
+      content: 'Researching optimal timing for cherry blossoms in different regions. Tokyo and Kyoto seem best for late March to early April. Need to book accommodations soon and plan itinerary around cultural sites and food experiences.',
+      concepts: ['travel', 'Japan', 'cherry_blossom', 'planning', 'culture'],
+      keywords: ['Japan', 'cherry', 'blossom', 'Tokyo', 'Kyoto', 'accommodations', 'cultural', 'food']
+    },
+    {
+      id: 'demo_9',
+      tags: ['investment', 'finance', 'research'],
+      summary: 'Research on sustainable investing and ESG funds',
+      content: 'Exploring ESG (Environmental, Social, Governance) investment options. Found several funds with strong track records in renewable energy and responsible tech companies. Need to balance returns with personal values.',
+      concepts: ['investing', 'ESG', 'sustainability', 'renewable_energy', 'values'],
+      keywords: ['ESG', 'environmental', 'social', 'governance', 'renewable', 'energy', 'sustainable', 'funds']
+    },
+    {
+      id: 'demo_10',
+      tags: ['music', 'learning', 'guitar'],
+      summary: 'Progress on fingerpicking guitar technique',
+      content: 'Been practicing Travis picking pattern for acoustic guitar. Can now play simple folk songs smoothly. The coordination between thumb and fingers is finally clicking. Next goal: barre chords.',
+      concepts: ['music', 'guitar', 'fingerpicking', 'technique', 'coordination'],
+      keywords: ['guitar', 'fingerpicking', 'Travis', 'acoustic', 'folk', 'coordination', 'barre', 'chords']
+    },
+    {
+      id: 'demo_11',
+      tags: ['photography', 'hobby', 'nature'],
+      summary: 'Nature photography workshop on composition techniques',
+      content: 'Attended workshop focusing on rule of thirds, leading lines, and natural framing. Practiced with macro lens for flower photography. The golden hour lighting techniques will be useful for landscape shots.',
+      concepts: ['photography', 'composition', 'nature', 'macro', 'lighting'],
+      keywords: ['photography', 'composition', 'rule', 'thirds', 'leading', 'lines', 'macro', 'golden', 'hour']
+    },
+    {
+      id: 'demo_12',
+      tags: ['networking', 'conference', 'AI'],
+      summary: 'AI conference insights on future of human-AI collaboration',
+      content: 'Key takeaways from the AI Summit: emphasis on human-AI collaboration rather than replacement. Interesting discussions on AI ethics, bias mitigation, and the importance of diverse training data. Met several researchers working on interpretable AI.',
+      concepts: ['AI', 'collaboration', 'ethics', 'bias', 'interpretability'],
+      keywords: ['AI', 'summit', 'collaboration', 'ethics', 'bias', 'mitigation', 'interpretable', 'researchers']
+    }
+  ];
+
+  // Generate more realistic demo embeddings and positions
+  nodeData.forEach((data, index) => {
+    const embedding = generateMockEmbedding(data.concepts, data.tags);
+    
+    // Create more clustered positioning for demo - group related topics
+    let baseX = 0, baseY = 0, baseZ = 0;
+    
+    // Cluster technical/AI topics
+    if (data.tags.some(tag => ['technical', 'AI', 'machine_learning', 'frontend'].includes(tag))) {
+      baseX = -15; baseY = 5; baseZ = -10;
+    }
+    // Cluster personal development topics
+    else if (data.tags.some(tag => ['learning', 'book', 'psychology', 'course'].includes(tag))) {
+      baseX = 10; baseY = 8; baseZ = 5;
+    }
+    // Cluster lifestyle topics
+    else if (data.tags.some(tag => ['health', 'cooking', 'music', 'photography'].includes(tag))) {
+      baseX = 5; baseY = -8; baseZ = 12;
+    }
+    // Cluster professional topics
+    else if (data.tags.some(tag => ['work', 'project', 'investment', 'networking'].includes(tag))) {
+      baseX = -8; baseY = -5; baseZ = -8;
+    }
+    // Default cluster for misc topics
+    else {
+      baseX = 0; baseY = 15; baseZ = 0;
+    }
+    
+    const position_3d: [number, number, number] = [
+      baseX + (Math.random() - 0.5) * 8,
+      baseY + (Math.random() - 0.5) * 6,
+      baseZ + (Math.random() - 0.5) * 8,
+    ];
+    
+    const node: MemoryNode = {
+      ...data,
+      connections: {},
+      embedding,
+      position_3d,
+      created_at: Date.now() - (nodeData.length - index) * 86400000, // Spread over 12 days
+      last_accessed: Date.now() - Math.random() * 7200000, // Last 2 hours
+      access_count: Math.floor(Math.random() * 25) + 5
+    };
+    demoNodes[node.id] = node;
+  });
+
+  // Create meaningful connections between related memories
+  const connections = [
+    // Technical cluster connections
+    { from: 'demo_2', to: 'demo_12', weight: 0.89 }, // AI research ↔ AI conference
+    { from: 'demo_3', to: 'demo_2', weight: 0.76 }, // RL course ↔ AI research
+    { from: 'demo_4', to: 'demo_1', weight: 0.72 }, // React project ↔ work goals
+    
+    // Learning and development
+    { from: 'demo_3', to: 'demo_5', weight: 0.68 }, // RL course ↔ psychology book
+    { from: 'demo_5', to: 'demo_1', weight: 0.74 }, // Psychology ↔ work decisions
+    { from: 'demo_12', to: 'demo_5', weight: 0.71 }, // AI conference ↔ decision making
+    
+    // Lifestyle and hobbies
+    { from: 'demo_6', to: 'demo_10', weight: 0.63 }, // Exercise ↔ guitar (discipline)
+    { from: 'demo_7', to: 'demo_8', weight: 0.82 }, // Cooking ↔ Japan travel (food culture)
+    { from: 'demo_10', to: 'demo_11', weight: 0.69 }, // Guitar ↔ photography (creative hobbies)
+    
+    // Professional development
+    { from: 'demo_1', to: 'demo_9', weight: 0.67 }, // Work goals ↔ investing
+    { from: 'demo_12', to: 'demo_4', weight: 0.73 }, // AI conference ↔ tech project
+    
+    // Cross-domain interesting connections
+    { from: 'demo_5', to: 'demo_11', weight: 0.58 }, // Psychology ↔ photography (perception)
+    { from: 'demo_6', to: 'demo_5', weight: 0.71 }, // Exercise ↔ psychology (mental health)
+    { from: 'demo_2', to: 'demo_4', weight: 0.79 }, // AI research ↔ React project
+    { from: 'demo_8', to: 'demo_11', weight: 0.65 }, // Travel ↔ photography
+  ];
+
+  // Add bidirectional connections
+  connections.forEach(({ from, to, weight }) => {
+    const variance = 0.05; // Small variance for realistic asymmetry
+    const outbound = weight;
+    const inbound = weight + (Math.random() - 0.5) * variance;
+    
+    demoNodes[from].connections[to] = {
+      outbound_weight: Math.max(0.1, Math.min(1, outbound)),
+      inbound_weight: Math.max(0.1, Math.min(1, inbound)),
+      last_accessed: Date.now() - Math.random() * 3600000, // Last hour
+      creation_date: Date.now() - Math.random() * 86400000 * 7 // Last week
+    };
+    
+    demoNodes[to].connections[from] = {
+      outbound_weight: Math.max(0.1, Math.min(1, inbound)),
+      inbound_weight: Math.max(0.1, Math.min(1, outbound)),
+      last_accessed: Date.now() - Math.random() * 3600000,
+      creation_date: Date.now() - Math.random() * 86400000 * 7
+    };
+  });
+
+  return demoNodes;
+};
+
 export const useMemoryStore = create<MemoryStore>((set, get) => ({
   nodes: {},
   selectedNode: null,
@@ -200,6 +401,9 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
 
   generateMockData: () =>
     set({ nodes: generateMockNodes() }),
+    
+  generateDemoData: () =>
+    set({ nodes: generateDemoNodes() }),
 
   simulateMemoryAccess: (nodeId, accessType) => {
     const { addMemoryAccess, nodes } = get();

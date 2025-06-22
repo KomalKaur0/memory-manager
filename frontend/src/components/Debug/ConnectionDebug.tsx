@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, TextInput, Animated } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useBackendConnection } from '../../hooks/useBackendConnection';
+import { useMemoryStore } from '../../stores/memoryStore';
 import { API_CONFIG } from '../../config/api';
 
 interface ConnectionDebugProps {
@@ -14,6 +15,7 @@ export const ConnectionDebug: React.FC<ConnectionDebugProps> = ({
   onToggle 
 }) => {
   const { status, testConnection, retryConnection, updateApiUrl } = useBackendConnection();
+  const { generateMockData, generateDemoData, nodes } = useMemoryStore();
   const [testResults, setTestResults] = useState<any>(null);
   const [testing, setTesting] = useState(false);
   const [newUrl, setNewUrl] = useState('');
@@ -145,6 +147,34 @@ export const ConnectionDebug: React.FC<ConnectionDebugProps> = ({
         </Pressable>
       </View>
 
+      <View style={styles.demoSection}>
+        <Text style={styles.sectionTitle}>Demo Data</Text>
+        <Text style={styles.detailText}>
+          Current nodes: {Object.keys(nodes).length}
+        </Text>
+        <View style={styles.actionSection}>
+          <Pressable
+            style={[styles.button, styles.demoButton]}
+            onPress={() => {
+              generateDemoData();
+              Alert.alert('Demo Data Loaded', '12 realistic memories with semantic clusters loaded for demonstration');
+            }}
+          >
+            <Text style={styles.buttonText}>Load Demo</Text>
+          </Pressable>
+          
+          <Pressable
+            style={[styles.button, styles.techButton]}
+            onPress={() => {
+              generateMockData();
+              Alert.alert('Tech Data Loaded', '7 technical memories loaded for system testing');
+            }}
+          >
+            <Text style={styles.buttonText}>Load Tech</Text>
+          </Pressable>
+        </View>
+      </View>
+
       <View style={styles.urlSection}>
         <Text style={styles.sectionTitle}>Update URL</Text>
         <TextInput
@@ -264,10 +294,19 @@ const styles = StyleSheet.create({
   updateButton: {
     backgroundColor: '#FF9500',
   },
+  demoButton: {
+    backgroundColor: '#8E44AD',
+  },
+  techButton: {
+    backgroundColor: '#2E86AB',
+  },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '500',
+  },
+  demoSection: {
+    marginBottom: 16,
   },
   resultsSection: {
     maxHeight: 200,

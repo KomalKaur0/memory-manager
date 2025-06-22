@@ -46,6 +46,46 @@ const generateResponseWithMemoryAccess = (): { content: string; memoryAccesses: 
   return responses[Math.floor(Math.random() * responses.length)];
 };
 
+const generateDemoResponseWithMemoryAccess = (): { content: string; memoryAccesses: MemoryAccessEvent[] } => {
+  const demoResponses = [
+    {
+      content: "That's an interesting question! Let me think about how your recent learning experiences might inform this. Your reinforcement learning studies and the psychology insights from Kahneman's work could provide a valuable framework for approaching this challenge.",
+      memoryAccesses: [
+        { node_id: 'demo_3', access_type: 'read' as const, timestamp: Date.now() - 2000 },
+        { node_id: 'demo_5', access_type: 'read' as const, timestamp: Date.now() - 1500 },
+        { node_id: 'demo_12', access_type: 'traverse' as const, timestamp: Date.now() - 1000, connection_id: 'demo_3-demo_5' }
+      ]
+    },
+    {
+      content: "This reminds me of your work on that React project and the AI research you've been doing. The TypeScript setup and your exploration of transformer architectures could be really relevant here. Also, your experience from the AI conference about human-AI collaboration seems applicable.",
+      memoryAccesses: [
+        { node_id: 'demo_4', access_type: 'read' as const, timestamp: Date.now() - 1800 },
+        { node_id: 'demo_2', access_type: 'read' as const, timestamp: Date.now() - 1200 },
+        { node_id: 'demo_12', access_type: 'traverse' as const, timestamp: Date.now() - 800, connection_id: 'demo_2-demo_12' },
+        { node_id: 'demo_1', access_type: 'strengthen' as const, timestamp: Date.now() - 400, weight_change: 0.12 }
+      ]
+    },
+    {
+      content: "Your disciplined approach to the morning workout routine and guitar practice shows you understand the value of consistent effort. This same mindset could work well for this project, especially considering your goal-oriented thinking from those quarterly planning sessions.",
+      memoryAccesses: [
+        { node_id: 'demo_6', access_type: 'read' as const, timestamp: Date.now() - 2200 },
+        { node_id: 'demo_10', access_type: 'read' as const, timestamp: Date.now() - 1600 },
+        { node_id: 'demo_1', access_type: 'traverse' as const, timestamp: Date.now() - 1000, connection_id: 'demo_6-demo_1' }
+      ]
+    },
+    {
+      content: "I notice you have interests in both creative and analytical areas - like your photography work focusing on composition and your investment research into ESG funds. This balance of creative and logical thinking could bring a unique perspective to solving this problem.",
+      memoryAccesses: [
+        { node_id: 'demo_11', access_type: 'read' as const, timestamp: Date.now() - 1900 },
+        { node_id: 'demo_9', access_type: 'read' as const, timestamp: Date.now() - 1300 },
+        { node_id: 'demo_5', access_type: 'traverse' as const, timestamp: Date.now() - 700, connection_id: 'demo_11-demo_5' }
+      ]
+    }
+  ];
+
+  return demoResponses[Math.floor(Math.random() * demoResponses.length)];
+};
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   messages: [],
   isTyping: false,
@@ -75,7 +115,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   simulateAssistantResponse: () => {
     const { addMessage } = get();
-    const response = generateResponseWithMemoryAccess();
+    
+    // Import memory store to check if demo data is loaded
+    const { useMemoryStore } = require('./memoryStore');
+    const memoryStore = useMemoryStore.getState();
+    const nodes = Object.keys(memoryStore.nodes);
+    const isDemoData = nodes.some(id => id.startsWith('demo_'));
+    
+    const response = isDemoData ? generateDemoResponseWithMemoryAccess() : generateResponseWithMemoryAccess();
     
     addMessage({
       content: response.content,
@@ -99,8 +146,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     setMemoryVisualizationVisible(true);
     memoryStore.setThinking(true);
     
+    // Check if demo data is loaded to use appropriate node IDs
+    const nodes = Object.keys(memoryStore.nodes);
+    const isDemoData = nodes.some(id => id.startsWith('demo_'));
+    
     // Simulate sequential memory access with realistic timing
-    const thinkingSequence = [
+    const thinkingSequence = isDemoData ? [
+      { nodeId: 'demo_3', accessType: 'read' as const, delay: 800 },
+      { nodeId: 'demo_5', accessType: 'traverse' as const, delay: 1200 },
+      { nodeId: 'demo_12', accessType: 'read' as const, delay: 600 },
+      { nodeId: 'demo_2', accessType: 'strengthen' as const, delay: 900 },
+      { nodeId: 'demo_4', accessType: 'read' as const, delay: 700 },
+    ] : [
       { nodeId: '1', accessType: 'read' as const, delay: 800 },
       { nodeId: '2', accessType: 'traverse' as const, delay: 1200 },
       { nodeId: '3', accessType: 'read' as const, delay: 600 },
