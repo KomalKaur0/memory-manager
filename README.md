@@ -10,7 +10,7 @@ Traditional Vector Search (The "Google Search" Problem):
 - Cannot leverage connection patterns to improve accuracy over time
 - Treats each piece of information as independent
 
-We believe we can combine the embedding space's ability to [] ideas and use a [] to draw connections between them. In essence, we are inspired by the human mind to create a memory solution that can dynamically use nodes in a graph like neurons in a brain.
+We believe we can combine the embedding space's ability to store ideas and use a graph to draw connections between them. In essence, we are inspired by the human mind to create a memory solution that can dynamically use nodes in a graph like neurons in a brain.
 
 ## What it does
 
@@ -63,6 +63,7 @@ For Real Applications:
 - Educational systems that understand knowledge prerequisites
 - Research tools that can discover non-obvious connections
 - Customer service that learns relationship patterns in problems
+- Company storage and access to knowledge and papers
 
 ## How we built it
 
