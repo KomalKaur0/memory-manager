@@ -104,6 +104,7 @@ class RetrievalConfig:
     use_conversation_context: bool = True
     context_influence_weight: float = 0.3
     temporal_context_window: int = 7  # days
+    conversation_history_length: int = 3  # Number of recent messages to consider
     
     # Performance settings
     enable_caching: bool = True
@@ -644,7 +645,7 @@ class HybridRetriever:
             if context.conversation_history:
                 # Simple keyword overlap check
                 memory_text = candidate.content.lower()
-                for message in context.conversation_history[-3:]:  # Last 3 messages
+                for message in context.conversation_history[-self.config.conversation_history_length:]:  # Use configurable length
                     message_words = set(message.lower().split())
                     memory_words = set(memory_text.split())
                     overlap = len(message_words.intersection(memory_words))

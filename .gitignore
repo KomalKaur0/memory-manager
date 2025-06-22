@@ -43,3 +43,6 @@ logs/
 
 # Local config
 config/local.py
+
+# Claude
+.claude/

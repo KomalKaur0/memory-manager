@@ -13,9 +13,12 @@ from enum import Enum
 import re
 import math
 from datetime import datetime, timedelta
+import logging
 
 from src.core.memory_node import MemoryNode
 from src.core.memory_graph import MemoryGraph
+
+logger = logging.getLogger(__name__)
 
 
 class RelevanceType(Enum):
@@ -106,6 +109,9 @@ class RelevanceAgent:
         # Thresholds
         self.relevance_threshold = self.config.get('relevance_threshold', 0.6)
         self.confidence_threshold = self.config.get('confidence_threshold', 0.7)
+        
+        # Conversation history configuration
+        self.conversation_history_length = self.config.get('conversation_history_length', 3)
         
         # Associative scoring configuration
         self.enable_claude_associative = self.config.get('enable_claude_associative', True)
@@ -358,6 +364,7 @@ class RelevanceAgent:
         """Calculate associative relevance using Claude AI for intelligent assessment."""
         if not self.enable_claude_associative or not self.claude_client:
             # Fallback to simple heuristic if Claude is not available
+            logger.info(f"Claude fallback used for memory '{memory.concept}': Claude not available (enabled={self.enable_claude_associative}, client={self.claude_client is not None})")
             return self._calculate_associative_fallback(memory, query, context)
         
         # Create cache key for this evaluation
@@ -369,7 +376,7 @@ class RelevanceAgent:
             # Prepare context for Claude
             conversation_context = ""
             if context.conversation_history:
-                recent_messages = context.conversation_history[-3:]  # Last 3 messages for context
+                recent_messages = context.conversation_history[-self.conversation_history_length:]  # Use configurable length
                 conversation_context = f"Recent conversation: {' | '.join(recent_messages)}"
             
             # Construct prompt for Claude
@@ -416,7 +423,7 @@ Format: "0.X Brief reason here"
             
         except Exception as e:
             # Fall back to heuristic on any error
-            print(f"Claude API error for associative scoring: {e}")
+            logger.warning(f"Claude API error for associative scoring of memory '{memory.concept}': {e}. Falling back to heuristic method.")
             return self._calculate_associative_fallback(memory, query, context)
     
     def _calculate_associative_fallback(self, memory: MemoryNode, query: str, context: QueryContext) -> float:
@@ -446,7 +453,7 @@ Format: "0.X Brief reason here"
         # Conversation context associations
         if context.conversation_history:
             context_words = set()
-            for msg in context.conversation_history[-2:]:  # Last 2 messages
+            for msg in context.conversation_history[-self.conversation_history_length:]:  # Use configurable length
                 context_words.update(re.findall(r'\w+', msg.lower()))
             
             context_overlap = len(context_words & memory_words) / max(len(context_words), 1)
