@@ -30,6 +30,7 @@ Thumbs.db
 *.safetensors
 models/
 wandb/
+.claude/
 
 # Database
 *.db
