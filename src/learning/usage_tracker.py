@@ -15,7 +15,7 @@ from pathlib import Path
 
 from ..core.memory_node import MemoryNode, ConnectionType
 from ..storage.graph_database import MemoryGraphDatabase
-from ..config.settings import get_settings
+from ...config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

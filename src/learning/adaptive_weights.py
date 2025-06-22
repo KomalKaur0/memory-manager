@@ -13,7 +13,7 @@ from ..core.memory_node import MemoryNode, Connection, ConnectionType
 from ..core.edge_manager import EdgeManager
 from ..storage.graph_database import MemoryGraphDatabase
 from .usage_tracker import UsageTracker, AccessType
-from ..config.settings import get_settings
+from ...config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

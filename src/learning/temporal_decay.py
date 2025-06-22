@@ -11,7 +11,7 @@ import math
 from ..core.memory_node import MemoryNode, Connection, ConnectionType
 from ..storage.graph_database import MemoryGraphDatabase
 from ..storage.vector_store import MemoryVectorStore
-from ..config.settings import get_settings
+from ...config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

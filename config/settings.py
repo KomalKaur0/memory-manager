@@ -244,7 +244,7 @@ def load_settings_from_file(file_path: str) -> Settings:
     Returns:
         Settings instance
     """
-    return Settings(_env_file=file_path)
+    return Settings()
 
 
 # Environment-specific configuration presets
