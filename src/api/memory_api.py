@@ -2,6 +2,7 @@
 Memory API endpoints for managing memory nodes and connections
 """
 import logging
+import uuid
 from typing import Dict, List, Optional
 from datetime import datetime
 
@@ -10,6 +11,8 @@ from pydantic import BaseModel, Field
 
 from ..core.memory_node import MemoryNode, ConnectionType
 from ..core.memory_graph import MemoryGraph
+from ..visualization.spatial_layout import SpatialLayoutEngine
+from .websocket_manager import websocket_manager
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,7 @@ class MemoryNodeResponse(BaseModel):
     connections: Dict[str, dict]
     access_count: int
     importance_score: float
+    position_3d: List[float]
 
 class MemoryAccessEvent(BaseModel):
     """Model for memory access events"""
@@ -63,6 +67,13 @@ def get_hybrid_retriever(request: Request):
     if not hasattr(request.app.state, 'hybrid_retriever'):
         raise HTTPException(status_code=503, detail="Hybrid retriever not initialized")
     return request.app.state.hybrid_retriever
+
+def get_spatial_layout_engine(request: Request) -> SpatialLayoutEngine:
+    """Dependency to get spatial layout engine instance"""
+    if not hasattr(request.app.state, 'spatial_layout_engine'):
+        # Initialize with default settings if not exists
+        request.app.state.spatial_layout_engine = SpatialLayoutEngine()
+    return request.app.state.spatial_layout_engine
 
 @memory_router.get("/nodes", response_model=Dict[str, MemoryNodeResponse])
 async def get_all_memory_nodes(
@@ -106,7 +117,8 @@ async def get_memory_node(
 async def create_memory_node(
     node_data: MemoryNodeCreate,
     memory_graph: MemoryGraph = Depends(get_memory_graph),
-    hybrid_retriever = Depends(get_hybrid_retriever)
+    hybrid_retriever = Depends(get_hybrid_retriever),
+    layout_engine: SpatialLayoutEngine = Depends(get_spatial_layout_engine)
 ):
     """Create a new memory node"""
     try:
@@ -132,6 +144,16 @@ async def create_memory_node(
         
         # Auto-connect to similar nodes
         await _auto_connect_node(node_id, memory_graph, hybrid_retriever)
+        
+        # Regenerate 3D layout with new node
+        await _update_3d_layout(memory_graph, layout_engine)
+        
+        # Broadcast memory creation event
+        await websocket_manager.broadcast_memory_update(
+            node_id=node.id,
+            update_type="created",
+            node_data=_convert_node_to_response(node).dict()
+        )
         
         return _convert_node_to_response(node)
         
@@ -167,6 +189,13 @@ async def update_memory_node(
         # Store embedding in the embedding search service
         hybrid_retriever.embedding_search.store_embedding(node_id, embedding)
         
+        # Broadcast memory update event
+        await websocket_manager.broadcast_memory_update(
+            node_id=node_id,
+            update_type="updated",
+            node_data=_convert_node_to_response(existing_node).dict()
+        )
+        
         return _convert_node_to_response(existing_node)
         
     except HTTPException:
@@ -185,6 +214,14 @@ async def delete_memory_node(
         success = memory_graph.remove_node(node_id)
         if not success:
             raise HTTPException(status_code=404, detail="Memory node not found")
+            
+        # Broadcast memory deletion event
+        await websocket_manager.broadcast_memory_update(
+            node_id=node_id,
+            update_type="deleted",
+            node_data=None
+        )
+        
         return {"message": "Memory node deleted successfully"}
     except HTTPException:
         raise
@@ -208,6 +245,15 @@ async def create_connection(
         
         if not success:
             raise HTTPException(status_code=400, detail="Failed to create connection - nodes may not exist")
+            
+        # Broadcast connection change event
+        await websocket_manager.broadcast_connection_change(
+            source_id=connection_data.source_id,
+            target_id=connection_data.target_id,
+            connection_type=connection_data.connection_type,
+            weight=connection_data.initial_weight,
+            change_type="created"
+        )
             
         return {"message": "Connection created successfully"}
     except HTTPException:
@@ -275,24 +321,103 @@ async def get_connected_nodes(
         logger.error(f"Error getting connected nodes for {node_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to get connected nodes")
 
+@memory_router.post("/layout/regenerate")
+async def regenerate_3d_layout(
+    memory_graph: MemoryGraph = Depends(get_memory_graph),
+    layout_engine: SpatialLayoutEngine = Depends(get_spatial_layout_engine)
+):
+    """Regenerate 3D layout for all memory nodes"""
+    try:
+        await _update_3d_layout(memory_graph, layout_engine)
+        return {"message": "3D layout regenerated successfully"}
+    except Exception as e:
+        logger.error(f"Error regenerating 3D layout: {e}")
+        raise HTTPException(status_code=500, detail="Failed to regenerate 3D layout")
+
+@memory_router.get("/layout/info")
+async def get_layout_info(
+    layout_engine: SpatialLayoutEngine = Depends(get_spatial_layout_engine)
+):
+    """Get information about current 3D layout clusters"""
+    try:
+        cluster_info = layout_engine.get_cluster_info()
+        return {
+            "clusters": cluster_info,
+            "space_size": layout_engine.space_size,
+            "clustering_strength": layout_engine.clustering_strength
+        }
+    except Exception as e:
+        logger.error(f"Error getting layout info: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get layout info")
+
 # WebSocket for real-time memory updates
 @memory_router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time memory access updates"""
-    await websocket.accept()
+async def websocket_memory_visualization(
+    websocket: WebSocket,
+    memory_graph: MemoryGraph = Depends(get_memory_graph)
+):
+    """WebSocket endpoint for memory visualization updates"""
+    connection_id = str(uuid.uuid4())
+    
+    # Establish connection
+    connected = await websocket_manager.connect(websocket, connection_id, "memory_viz")
+    if not connected:
+        return
+    
     try:
+        # Send initial memory graph data
+        if memory_graph and memory_graph.nodes:
+            nodes_data = {}
+            for node_id, node in memory_graph.nodes.items():
+                nodes_data[node_id] = _convert_node_to_response(node).dict()
+            
+            await websocket_manager.send_to_connection(connection_id, {
+                "type": "initial_data",
+                "data": {
+                    "nodes": nodes_data,
+                    "timestamp": datetime.now().timestamp()
+                }
+            })
+        
+        # Keep connection alive and handle any messages
         while True:
-            # Wait for messages from client
             data = await websocket.receive_json()
             
-            # Echo back for now (extend with real-time memory access updates)
-            await websocket.send_json({
-                "type": "memory_access",
-                "data": data,
-                "timestamp": datetime.now().isoformat()
-            })
+            # Handle different message types
+            message_type = data.get("type", "ping")
+            
+            if message_type == "ping":
+                await websocket_manager.send_to_connection(connection_id, {
+                    "type": "pong",
+                    "data": {"timestamp": datetime.now().timestamp()}
+                })
+            elif message_type == "request_update":
+                # Client requesting fresh data
+                if memory_graph:
+                    nodes_data = {}
+                    for node_id, node in memory_graph.nodes.items():
+                        nodes_data[node_id] = _convert_node_to_response(node).dict()
+                    
+                    await websocket_manager.send_to_connection(connection_id, {
+                        "type": "full_update",
+                        "data": {
+                            "nodes": nodes_data,
+                            "timestamp": datetime.now().timestamp()
+                        }
+                    })
+            else:
+                # Unknown message type
+                await websocket_manager.send_to_connection(connection_id, {
+                    "type": "error",
+                    "data": {"message": f"Unknown message type: {message_type}"}
+                })
+                
     except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected")
+        logger.info(f"Memory visualization WebSocket client disconnected: {connection_id}")
+    except Exception as e:
+        logger.error(f"Memory visualization WebSocket error: {e}")
+    finally:
+        websocket_manager.disconnect(connection_id)
 
 # Helper functions
 def _convert_node_to_response(node: MemoryNode) -> MemoryNodeResponse:
@@ -314,7 +439,8 @@ def _convert_node_to_response(node: MemoryNode) -> MemoryNodeResponse:
             for conn_id, conn in node.connections.items()
         },
         access_count=node.access_count,
-        importance_score=node.importance_score
+        importance_score=node.importance_score,
+        position_3d=list(node.position_3d)
     )
 
 async def _auto_connect_node(node_id: str, memory_graph: MemoryGraph, hybrid_retriever):
@@ -348,3 +474,27 @@ async def _auto_connect_node(node_id: str, memory_graph: MemoryGraph, hybrid_ret
         
     except Exception as e:
         logger.warning(f"Failed to auto-connect node {node_id}: {e}")
+
+async def _update_3d_layout(memory_graph: MemoryGraph, layout_engine: SpatialLayoutEngine):
+    """Update 3D positions for all memory nodes"""
+    try:
+        # Get all nodes
+        nodes = list(memory_graph.nodes.values())
+        
+        if not nodes:
+            return
+            
+        # Generate new layout
+        positions = layout_engine.generate_initial_layout(nodes)
+        
+        # Update node positions
+        for node_id, position in positions.items():
+            node = memory_graph.get_node(node_id)
+            if node:
+                node.position_3d = position
+                
+        logger.info(f"Updated 3D layout for {len(positions)} memory nodes")
+        
+    except Exception as e:
+        logger.error(f"Error updating 3D layout: {e}")
+        raise

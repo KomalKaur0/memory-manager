@@ -18,12 +18,16 @@ from src.api.memory_api import memory_router
 from src.api.search_api import search_router
 from src.api.admin_api import admin_router
 from src.api.chat_api import chat_router
+from src.api.analytics_api import analytics_router
 from src.core.memory_graph import MemoryGraph
 from src.retrieval.embedding_search_mock import EmbeddingSearch
 from src.retrieval.hybrid_retriever_simple import HybridRetriever
 from src.agents.relevance_agent import get_claude_client_from_env
 from src.agents.connection_agent import ConnectionAgent
 from src.retrieval.embedding_search import get_embedding_config_from_env
+from src.api.websocket_manager import websocket_manager
+from src.visualization.spatial_layout import SpatialLayoutEngine
+from src.core.memory_node import MemoryNode, ConnectionType
 
 # Load environment variables from .env file
 load_dotenv()
@@ -63,12 +67,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     # Initialize Claude client with API key from .env
     claude_client = get_claude_client_from_env()
     
+    # Initialize spatial layout engine
+    spatial_layout_engine = SpatialLayoutEngine()
+    
+    # Create demo data if memory graph is empty
+    if len(memory_graph.nodes) == 0:
+        logger.info("Creating demo memory data...")
+        await create_demo_memory_data(memory_graph, spatial_layout_engine, hybrid_retriever)
+    
     # Store instances in app state for access in routes
     app.state.memory_graph = memory_graph
     app.state.embedding_search = embedding_search
     app.state.hybrid_retriever = hybrid_retriever
     app.state.connection_agent = connection_agent
     app.state.claude_client = claude_client
+    app.state.websocket_manager = websocket_manager
+    app.state.spatial_layout_engine = spatial_layout_engine
     
     logger.info("AI Memory System initialized successfully")
     
@@ -106,6 +120,7 @@ app.include_router(memory_router, prefix="/api/memory", tags=["memory"])
 app.include_router(search_router, prefix="/api/search", tags=["search"])
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
+app.include_router(analytics_router, prefix="/api/analytics", tags=["analytics"])
 
 @app.get("/")
 async def root():
@@ -153,6 +168,125 @@ async def internal_error_handler(request, exc):
         status_code=500,
         content={"error": "Internal server error", "message": "An unexpected error occurred"}
     )
+
+async def create_demo_memory_data(memory_graph, layout_engine, hybrid_retriever):
+    """Create comprehensive demo data with realistic memory clusters"""
+    
+    demo_memories = [
+        {
+            "concept": "Transformer Architecture",
+            "summary": "Deep dive into attention mechanisms and transformer models",
+            "content": "Transformers use self-attention to process sequences in parallel. Key innovations include multi-head attention, positional encoding, and layer normalization. The architecture has revolutionized NLP and is now being applied to computer vision and other domains.",
+            "tags": ["AI", "research", "transformers"],
+            "keywords": ["attention", "transformer", "NLP", "self-attention", "multi-head"]
+        },
+        {
+            "concept": "Large Language Models",
+            "summary": "Understanding the scaling laws and emergent capabilities of LLMs",
+            "content": "Large language models like GPT and Claude demonstrate emergent capabilities as they scale. Key factors include model size, training data quality, and compute resources. These models show surprising abilities in reasoning, creativity, and knowledge synthesis.",
+            "tags": ["AI", "research", "LLM"],
+            "keywords": ["language", "model", "scaling", "emergent", "GPT", "Claude"]
+        },
+        {
+            "concept": "React TypeScript Best Practices",
+            "summary": "Modern React development patterns with TypeScript",
+            "content": "Best practices include strict typing, component composition, custom hooks for logic reuse, and proper state management. Use Zustand for simple state, Redux Toolkit for complex apps, and React Query for server state.",
+            "tags": ["programming", "frontend", "react"],
+            "keywords": ["React", "TypeScript", "hooks", "state", "Zustand", "patterns"]
+        },
+        {
+            "concept": "Vector Embeddings",
+            "summary": "Understanding semantic representations in high-dimensional space",
+            "content": "Vector embeddings map discrete objects to continuous vector spaces where semantic similarity corresponds to geometric proximity. Applications include word embeddings, sentence transformers, and multimodal encoders.",
+            "tags": ["ML", "embeddings", "vectors"],
+            "keywords": ["embedding", "vector", "semantic", "similarity", "transformer", "space"]
+        },
+        {
+            "concept": "3D Visualization Techniques",
+            "summary": "Creating interactive 3D experiences for web applications",
+            "content": "Modern 3D visualization combines WebGL, Three.js, and React for interactive experiences. Key concepts include scene graphs, camera controls, material systems, and performance optimization techniques.",
+            "tags": ["programming", "frontend", "3D"],
+            "keywords": ["Three.js", "3D", "WebGL", "React", "visualization", "interactive"]
+        }
+    ]
+    
+    # Create memory nodes
+    nodes = []
+    for memory_data in demo_memories:
+        node = MemoryNode(
+            concept=memory_data["concept"],
+            summary=memory_data["summary"],
+            full_content=memory_data["content"],
+            tags=memory_data["tags"],
+            keywords=memory_data["keywords"]
+        )
+        
+        # Add some realistic metadata
+        import random
+        node.access_count = random.randint(1, 15)
+        node.importance_score = random.uniform(0.4, 0.9)
+        
+        nodes.append(node)
+        memory_graph.add_node(node)
+        
+        # Generate embedding for the content
+        try:
+            embedding = await hybrid_retriever.embedding_search.get_embedding(
+                f"{node.concept} {node.summary} {node.full_content}"
+            )
+            hybrid_retriever.embedding_search.store_embedding(node.id, embedding)
+        except Exception as e:
+            logger.warning(f"Failed to generate embedding for {node.concept}: {e}")
+    
+    # Generate 3D layout
+    logger.info(f"Generating 3D layout for {len(nodes)} nodes...")
+    positions = layout_engine.generate_initial_layout(nodes)
+    
+    # Update node positions
+    for node_id, position in positions.items():
+        node = memory_graph.get_node(node_id)
+        if node:
+            node.position_3d = position
+    
+    # Create comprehensive connections between related memories
+    connections_to_create = [
+        # AI Research cluster connections (strong relationships)
+        (0, 1, ConnectionType.SIMILARITY, 0.85),  # Transformer <-> LLM
+        (1, 0, ConnectionType.SIMILARITY, 0.82),  # LLM <-> Transformer
+        
+        # Programming cluster connections
+        (2, 4, ConnectionType.CONTEXT, 0.75),    # React <-> 3D Visualization
+        (4, 2, ConnectionType.CONTEXT, 0.72),    # 3D Visualization <-> React
+        
+        # Cross-domain connections (AI + Programming)
+        (1, 3, ConnectionType.SIMILARITY, 0.65), # LLM <-> Vector Embeddings
+        (3, 1, ConnectionType.SIMILARITY, 0.62), # Vector Embeddings <-> LLM
+        (3, 4, ConnectionType.CONTEXT, 0.60),    # Vector Embeddings <-> 3D Visualization
+        (4, 3, ConnectionType.CONTEXT, 0.58),    # 3D Visualization <-> Vector Embeddings
+        
+        # More AI connections
+        (0, 3, ConnectionType.CONTEXT, 0.55),    # Transformer <-> Vector Embeddings
+        (3, 0, ConnectionType.CONTEXT, 0.53),    # Vector Embeddings <-> Transformer
+        
+        # Technical implementation connections
+        (2, 3, ConnectionType.CONTEXT, 0.50),    # React <-> Vector Embeddings
+        (3, 2, ConnectionType.CONTEXT, 0.48),    # Vector Embeddings <-> React
+    ]
+    
+    logger.info(f"Creating {len(connections_to_create)} connections...")
+    for source_idx, target_idx, conn_type, weight in connections_to_create:
+        if source_idx < len(nodes) and target_idx < len(nodes):
+            source_node = nodes[source_idx]
+            target_node = nodes[target_idx]
+            
+            success = memory_graph.create_connection(source_node.id, target_node.id, conn_type, weight)
+            if success:
+                logger.info(f"  ✅ Connected {source_node.concept} -> {target_node.concept} ({weight})")
+            else:
+                logger.warning(f"  ❌ Failed to connect {source_node.concept} -> {target_node.concept}")
+    
+    logger.info(f"Created {len(nodes)} demo memory nodes with 3D positioning")
+    return memory_graph
 
 if __name__ == "__main__":
     import uvicorn

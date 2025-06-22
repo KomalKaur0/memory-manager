@@ -665,10 +665,12 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
       color: string;
       depth: number;
       isVisible: boolean;
+      glowIntensity: number;
     }> = [];
     
     // Track processed connections to avoid duplicates
     const processed = new Set<string>();
+    
     
     Object.entries(nodes).forEach(([nodeId, node]) => {
       const startPos = nodePositions[nodeId];
@@ -709,7 +711,8 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
           y2 = Math.max(viewport.top, Math.min(viewport.bottom, y2));
         }
         
-        const weight = connection.outbound_weight;
+        // Fix weight access - backend uses 'weight' field, not 'outbound_weight'
+        const weight = connection.outbound_weight || connection.weight || 0.5;
         // Blue glow connections with intensity based on weight
         const baseBlue = '#4A90E2';
         const glowBlue = '#87CEEB';
@@ -724,6 +727,7 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
         const hasRecentAccess = startRecentAccess || endRecentAccess;
         const baseGlowIntensity = Math.max(0.2, weight);
         const boostedGlow = hasRecentAccess ? Math.min(1, baseGlowIntensity * 1.5) : baseGlowIntensity;
+        
 
         // Calculate node sizes to clip lines at node edges
         const startNode = nodes[nodeId];
@@ -754,7 +758,7 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
         const clippedX2 = x2 - dirX * endRadius;
         const clippedY2 = y2 - dirY * endRadius;
 
-        connections.push({
+        const connectionObj = {
           id: connectionId,
           x1: clippedX1,
           y1: clippedY1,
@@ -765,13 +769,16 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
           depth: (startScreen.depth + endScreen.depth) / 2,
           isVisible: true,
           glowIntensity: boostedGlow,
-        });
+        };
+        
+        connections.push(connectionObj);
       });
     });
     
+    
     // Sort by depth for proper rendering
     return connections.sort((a, b) => b.depth - a.depth);
-  }, [nodes, nodePositions, camera]);
+  }, [nodes, nodePositions, camera, recentAccessMap]);
 
   // Handle node selection
   const handleNodePress = (nodeId: string) => {
@@ -815,8 +822,12 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
               {/* Render connections within clipped area */}
               <G clipPath="url(#viewportClip)">
                 {projectedConnections.map((connection) => {
-                  const baseWidth = Math.max(1, connection.weight * 4);
-                  const baseOpacity = connection.glowIntensity * 0.8;
+                  // Safe fallbacks with good visibility
+                  const weight = connection.weight || 0.5;
+                  const glowIntensity = connection.glowIntensity || 0.8;
+                  
+                  const baseWidth = Math.max(3, weight * 6);
+                  const baseOpacity = Math.max(0.6, Math.min(1.0, glowIntensity));
                   
                   return (
                     <G key={connection.id}>

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { MemoryGraphState, MemoryNode, MemoryAccessEvent } from '../types/memory';
+import { apiService } from '../services/apiService';
 
 interface MemoryStore extends MemoryGraphState {
   // Actions
@@ -10,11 +11,23 @@ interface MemoryStore extends MemoryGraphState {
   updateConnectionWeight: (nodeId: string, targetId: string, weightChange: number) => void;
   setActiveConnections: (connectionIds: string[]) => void;
   
+  // Backend integration methods
+  loadMemoryNodes: () => Promise<boolean>;
+  refreshMemoryGraph: () => Promise<boolean>;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  
   // Mock data methods
   generateMockData: () => void;
   generateDemoData: () => void;
   simulateMemoryAccess: (nodeId: string, accessType: MemoryAccessEvent['access_type']) => void;
   clearRecentAccesses: () => void;
+  
+  // State
+  loading: boolean;
+  error: string | null;
+  isUsingBackend: boolean;
+  initialized: boolean;
 }
 
 // Generate mock embeddings (normally would come from embedding model)
@@ -357,6 +370,10 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
   activeConnections: [],
   recentAccesses: [],
   isThinking: false,
+  loading: false,
+  error: null,
+  isUsingBackend: false,
+  initialized: false,
 
   addNode: (node) =>
     set((state) => ({
@@ -400,10 +417,10 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
     set({ activeConnections: connectionIds }),
 
   generateMockData: () =>
-    set({ nodes: generateMockNodes() }),
+    set({ nodes: generateMockNodes(), initialized: true }),
     
   generateDemoData: () =>
-    set({ nodes: generateDemoNodes() }),
+    set({ nodes: generateDemoNodes(), initialized: true }),
 
   simulateMemoryAccess: (nodeId, accessType) => {
     const { addMemoryAccess, nodes } = get();
@@ -432,5 +449,113 @@ export const useMemoryStore = create<MemoryStore>((set, get) => ({
   },
 
   clearRecentAccesses: () =>
-    set({ recentAccesses: [] })
+    set({ recentAccesses: [] }),
+
+  // Backend integration methods
+  setLoading: (loading) => set({ loading }),
+  
+  setError: (error) => set({ error }),
+
+  loadMemoryNodes: async () => {
+    const { setLoading, setError, isUsingBackend } = get();
+    
+    // Prevent multiple simultaneous loads
+    if (get().loading) {
+      console.log('🔄 Memory nodes already loading, skipping...');
+      return false;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('🔄 Loading memory nodes from backend...');
+      
+      const response = await apiService.getMemoryNodes();
+      
+      if (response.success && response.data) {
+        const nodeCount = Object.keys(response.data).length;
+        console.log('✅ Successfully loaded memory nodes:', nodeCount);
+        
+        // Only proceed if we actually have nodes
+        if (nodeCount > 0) {
+          // Convert backend response to frontend format
+          const backendNodes = response.data;
+          const frontendNodes: Record<string, MemoryNode> = {};
+          let totalConnections = 0;
+          
+          Object.entries(backendNodes).forEach(([nodeId, backendNode]: [string, any]) => {
+            const connectionCount = Object.keys(backendNode.connections || {}).length;
+            totalConnections += connectionCount;
+            
+            // Map backend format to frontend format
+            frontendNodes[nodeId] = {
+              id: backendNode.id,
+              tags: backendNode.tags || [],
+              summary: backendNode.summary || '',
+              content: backendNode.content || '',
+              concepts: backendNode.keywords || [], // Use keywords as concepts fallback
+              keywords: backendNode.keywords || [],
+              connections: convertBackendConnections(backendNode.connections || {}),
+              embedding: backendNode.embedding || [], // May not be present
+              position_3d: backendNode.position_3d || [0, 0, 0],
+              created_at: Date.now(), // Use current time as fallback
+              last_accessed: Date.now(), // Use current time as fallback  
+              access_count: backendNode.access_count || 0
+            };
+            
+          });
+          
+          set({ 
+            nodes: frontendNodes, 
+            isUsingBackend: true,
+            loading: false,
+            error: null,
+            initialized: true
+          });
+          
+          return true;
+        } else {
+          console.warn('⚠️ Backend returned 0 nodes');
+          set({ loading: false, initialized: true }); // Mark as initialized even with 0 nodes
+          return false;
+        }
+      } else {
+        console.warn('⚠️ Backend response unsuccessful, falling back to mock data');
+        set({ error: 'Failed to load from backend', loading: false, initialized: true });
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error loading memory nodes from backend:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Unknown error', 
+        loading: false, 
+        initialized: true 
+      });
+      return false;
+    }
+  },
+
+  refreshMemoryGraph: async () => {
+    const { loadMemoryNodes } = get();
+    return await loadMemoryNodes();
+  }
 }));
+
+// Helper function to convert backend connection format to frontend format
+function convertBackendConnections(backendConnections: any): Record<string, any> {
+  const frontendConnections: Record<string, any> = {};
+  
+  Object.entries(backendConnections).forEach(([targetId, connection]: [string, any]) => {
+    const weight = connection.weight ?? 0;
+    
+    frontendConnections[targetId] = {
+      outbound_weight: weight,
+      inbound_weight: weight, // Backend might not have separate inbound weight
+      last_accessed: Date.now(),
+      creation_date: Date.now()
+    };
+  });
+  
+  return frontendConnections;
+}

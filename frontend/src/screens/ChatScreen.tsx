@@ -24,10 +24,42 @@ export const ChatScreen: React.FC = () => {
     setMemoryVisualizationVisible,
     addMessage,
     simulateThinkingWithMemoryAccess,
+    setTyping,
   } = useChatStore();
 
-  const { selectNode, simulateMemoryAccess } = useMemoryStore();
+  const { 
+    selectNode, 
+    simulateMemoryAccess, 
+    loadMemoryNodes, 
+    generateMockData, 
+    nodes, 
+    isUsingBackend,
+    initialized 
+  } = useMemoryStore();
   const { status: connectionStatus, sendMessage } = useBackendConnection();
+
+  // Initialize memory data on component mount
+  useEffect(() => {
+    const initializeMemoryData = async () => {
+      const nodeCount = Object.keys(nodes).length;
+      console.log(`🔄 Chat: Initialized: ${initialized}, Node count: ${nodeCount}`);
+      
+      // Only initialize if not already initialized
+      if (!initialized) {
+        console.log('🔄 Chat: Initializing memory data...');
+        
+        // Try to load from backend first
+        const backendSuccess = await loadMemoryNodes();
+        
+        if (!backendSuccess) {
+          console.log('📦 Chat: Backend unavailable, using mock data');
+          generateMockData();
+        }
+      }
+    };
+    
+    initializeMemoryData();
+  }, []); // Remove dependencies to prevent infinite loop
 
   useEffect(() => {
     // Auto-scroll to bottom when new message is added
@@ -78,31 +110,78 @@ export const ChatScreen: React.FC = () => {
       role: 'user',
     });
 
+    console.log(`🔄 Chat: Sending message "${userMessage.slice(0, 50)}..."`);
+    console.log(`🔌 Connection status: Connected=${connectionStatus.isConnected}, Error=${connectionStatus.error}`);
+
+    // Show thinking indicator
+    setTyping(true);
+    
+    let backendFailed = false;
+    let backendError: string | null = null;
+
     try {
+      // First try: Real backend
       if (connectionStatus.isConnected) {
-        // Use real backend
-        const response = await sendMessage(userMessage, messages);
+        console.log('🤖 Attempting real backend for AI response...');
         
-        // Add AI response with memory accesses
-        addMessage({
-          content: response.message.content,
-          role: 'assistant',
-          memory_accesses: response.memory_access_events || [],
-        });
-        
-        // Update memory store with retrieved memories if any
-        if (response.retrieved_memories?.length > 0) {
-          // Process retrieved memories and update memory visualization
-          console.log('Retrieved memories:', response.retrieved_memories);
+        try {
+          const response = await sendMessage(userMessage, messages);
+          console.log('✅ Backend response received:', response);
+          
+          setTyping(false);
+          
+          // Add AI response with memory accesses
+          addMessage({
+            content: response.message.content,
+            role: 'assistant',
+            memory_accesses: response.memory_access_events || [],
+          });
+          
+          // Update memory store with retrieved memories if any
+          if (response.retrieved_memories?.length > 0) {
+            console.log('📚 Retrieved memories:', response.retrieved_memories.length);
+            // Process retrieved memories and update memory visualization
+            response.retrieved_memories.forEach((memory: any) => {
+              console.log(`  - ${memory.concept}: ${memory.relevance_score}`);
+            });
+          }
+          
+          // Trigger memory visualization if there were memory accesses
+          if (response.memory_access_events?.length > 0) {
+            setMemoryVisualizationVisible(true);
+            setTimeout(() => setMemoryVisualizationVisible(false), 3000);
+          }
+          
+          // Success! Return early
+          return;
+        } catch (backendErr) {
+          console.log('⚠️ Backend failed, will try fallback...');
+          backendFailed = true;
+          backendError = backendErr instanceof Error ? backendErr.message : 'Backend communication failed';
         }
       } else {
-        // Fallback to simulation
-        await simulateThinkingWithMemoryAccess();
+        console.log('🔌 Backend not connected, using fallback...');
+        backendFailed = true;
+        backendError = connectionStatus.error || 'Backend not connected';
       }
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      // Fallback to simulation on error
-      await simulateThinkingWithMemoryAccess();
+      
+      // Second try: Simulation fallback
+      if (backendFailed) {
+        console.log('📦 Using simulation fallback...');
+        setTyping(false); // Stop thinking indicator before simulation starts its own
+        await simulateThinkingWithMemoryAccess();
+        return;
+      }
+      
+    } catch (simulationError) {
+      // All fallbacks failed - now we show an error
+      console.error('❌ All fallbacks failed:', simulationError);
+      setTyping(false);
+      
+      addMessage({
+        content: `I'm having trouble responding right now. Backend error: ${backendError || 'Unknown'}. Simulation error: ${simulationError instanceof Error ? simulationError.message : 'Unknown'}. Please try again.`,
+        role: 'assistant',
+      });
     }
   };
 

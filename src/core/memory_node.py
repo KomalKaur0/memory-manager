@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from pydantic import BaseModel, Field
 from enum import Enum
 import uuid
@@ -33,6 +33,9 @@ class MemoryNode(BaseModel):
     # Metadata
     access_count: int = Field(default=0, ge=0)
     importance_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    
+    # 3D visualization coordinates
+    position_3d: Tuple[float, float, float] = Field(default=(0.0, 0.0, 0.0))
     
     # Vector reference
     embedding_id: Optional[str] = None
@@ -103,6 +106,7 @@ class MemoryNode(BaseModel):
             },
             "access_count": self.access_count,
             "importance_score": self.importance_score,
+            "position_3d": list(self.position_3d),
             "embedding_id": self.embedding_id
         }
     
@@ -129,5 +133,6 @@ class MemoryNode(BaseModel):
             connections=connections,
             access_count=data.get("access_count", 0),
             importance_score=data.get("importance_score", 0.5),
+            position_3d=tuple(data.get("position_3d", [0.0, 0.0, 0.0])),
             embedding_id=data.get("embedding_id")
         )

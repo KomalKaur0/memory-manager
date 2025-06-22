@@ -144,20 +144,28 @@ export const useBackendConnection = () => {
     checkConnection();
   }, [checkConnection]);
 
-  // Send message to backend
+  // Send message to backend with comprehensive fallback handling
   const sendMessage = useCallback(async (content: string, conversationHistory: any[] = []) => {
-    if (!status.isConnected) {
-      throw new Error('Not connected to backend');
-    }
-
+    // Don't throw immediately if not connected - let the caller handle fallback
+    
     try {
-      const response = await apiService.sendMessage(content, conversationHistory);
-      if (response.success) {
-        return response.data;
+      if (status.isConnected) {
+        console.log('🔄 Attempting to send message via backend...');
+        const response = await apiService.sendMessage(content, conversationHistory);
+        if (response.success) {
+          console.log('✅ Backend message sent successfully');
+          return response.data;
+        } else {
+          console.warn('⚠️ Backend returned unsuccessful response:', response.message);
+          throw new Error(response.message || 'Backend returned unsuccessful response');
+        }
       } else {
-        throw new Error(response.message || 'Failed to send message');
+        console.log('⚠️ Backend not connected, will use fallback');
+        throw new Error('Backend not connected');
       }
     } catch (error) {
+      console.log('❌ Backend message failed:', error instanceof Error ? error.message : error);
+      // Don't log as error here - let the caller decide what to do
       throw error;
     }
   }, [status.isConnected]);

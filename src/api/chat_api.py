@@ -15,6 +15,7 @@ import random
 
 from src.agents.relevance_agent import RelevanceAgent, QueryContext, QueryType
 from src.agents.filter_agent import FilterAgent, UserPreferences, ResponseContext
+from .websocket_manager import websocket_manager
 
 logger = logging.getLogger(__name__)
 
@@ -156,14 +157,20 @@ async def send_message(
         for i, memory in enumerate(selected_memories):
             relevance_score = final_relevance_scores[i]
             
-            memory_access_events.append({
+            access_event = {
                 "node_id": memory.id,
+                "concept": memory.concept,
                 "access_type": "read",
                 "timestamp": datetime.now().timestamp(),
                 "relevance_score": relevance_score.overall,
                 "confidence": relevance_score.confidence,
-                "reasoning": relevance_score.reasoning
-            })
+                "reasoning": relevance_score.reasoning,
+                "position_3d": list(memory.position_3d)
+            }
+            memory_access_events.append(access_event)
+            
+            # Broadcast memory access event in real-time
+            await websocket_manager.broadcast_memory_access(access_event)
             
             # Update memory access count
             memory.update_access()
@@ -302,69 +309,201 @@ async def stream_chat_response(
     )
 
 @chat_router.websocket("/ws")
-async def websocket_chat(websocket: WebSocket):
+async def websocket_chat(
+    websocket: WebSocket,
+    hybrid_retriever = Depends(get_hybrid_retriever),
+    memory_graph = Depends(get_memory_graph),
+    connection_agent = Depends(get_connection_agent),
+    claude_client = Depends(get_claude_client)
+):
     """WebSocket endpoint for real-time chat with memory visualization"""
-    await websocket.accept()
+    connection_id = str(uuid.uuid4())
+    
+    # Establish connection
+    connected = await websocket_manager.connect(websocket, connection_id, "chat")
+    if not connected:
+        return
     
     try:
         while True:
             # Receive message from client
             data = await websocket.receive_json()
             message_content = data.get("content", "")
+            conversation_history = data.get("conversation_history", [])
             
             if not message_content:
-                await websocket.send_json({
+                await websocket_manager.send_to_connection(connection_id, {
                     "type": "error",
                     "data": {"message": "Empty message content"}
                 })
                 continue
             
             # Send thinking status
-            await websocket.send_json({
-                "type": "thinking",
-                "data": {"status": "processing", "message": "Searching memories..."}
-            })
+            await websocket_manager.send_thinking_status(
+                connection_id, "searching", "Searching for relevant memories..."
+            )
             
-            # Simulate memory access (replace with actual retrieval)
-            await asyncio.sleep(0.5)
-            
-            # Send mock memory access event
-            await websocket.send_json({
-                "type": "memory_access",
-                "data": {
-                    "node_id": "mock_node_1",
-                    "concept": "Mock Memory Access",
-                    "access_type": "read",
-                    "timestamp": datetime.now().timestamp()
-                }
-            })
-            
-            # Send response
-            await websocket.send_json({
-                "type": "response",
-                "data": {
-                    "content": f"I received your message: '{message_content}'. This is a mock response.",
-                    "timestamp": datetime.now().timestamp()
-                }
-            })
-            
-            # Send completion signal
-            await websocket.send_json({
-                "type": "complete",
-                "data": {}
-            })
+            # Process message using the same logic as send_message endpoint
+            try:
+                session_id = str(uuid.uuid4())
+                
+                # Create query context
+                query_context = QueryContext(
+                    query=message_content,
+                    conversation_history=conversation_history[-5:],
+                    user_intent="chat",
+                    domain="general",
+                    query_type=QueryType.SEARCH
+                )
+                
+                # Search for candidate memories
+                search_results = await hybrid_retriever.search_memories(
+                    query=message_content,
+                    max_results=15,
+                    use_graph_expansion=True
+                )
+                
+                # Send thinking status
+                await websocket_manager.send_thinking_status(
+                    connection_id, "processing", "Evaluating memory relevance..."
+                )
+                
+                # Process with agents (similar to send_message)
+                candidate_memories = []
+                for result in search_results:
+                    node = memory_graph.get_node(result["memory_id"])
+                    if node:
+                        candidate_memories.append(node)
+                
+                # Use RelevanceAgent
+                relevance_agent = RelevanceAgent(memory_graph=memory_graph, claude_client=claude_client)
+                reference_memory_ids = [result["memory_id"] for result in search_results[:3]]
+                
+                memory_relevance_scores = []
+                for memory in candidate_memories:
+                    relevance_score = relevance_agent.evaluate_relevance(
+                        memory=memory,
+                        query=message_content,
+                        context=query_context,
+                        reference_memory_ids=reference_memory_ids
+                    )
+                    memory_relevance_scores.append((memory, relevance_score))
+                
+                # Use FilterAgent
+                filter_agent = FilterAgent()
+                user_preferences = UserPreferences(
+                    max_memories=5,
+                    prefer_recent=True,
+                    avoid_redundancy=True,
+                    relevance_threshold=0.3,
+                    diversity_factor=0.7
+                )
+                response_context = ResponseContext(
+                    response_type="chat",
+                    user_context="conversation",
+                    conversation_history=conversation_history,
+                    platform="websocket"
+                )
+                
+                memories_for_filtering = [item[0] for item in memory_relevance_scores]
+                relevance_scores = [item[1] for item in memory_relevance_scores]
+                
+                filter_result = filter_agent.filter_for_response(
+                    candidate_memories=memories_for_filtering,
+                    relevance_scores=relevance_scores,
+                    user_preferences=user_preferences,
+                    response_context=response_context
+                )
+                
+                # Send thinking status
+                await websocket_manager.send_thinking_status(
+                    connection_id, "generating", "Generating response with selected memories..."
+                )
+                
+                # Record memory access events (will broadcast automatically)
+                selected_memories = filter_result.selected_memories
+                final_relevance_scores = filter_result.relevance_scores
+                
+                for i, memory in enumerate(selected_memories):
+                    relevance_score = final_relevance_scores[i]
+                    
+                    access_event = {
+                        "node_id": memory.id,
+                        "concept": memory.concept,
+                        "access_type": "read",
+                        "timestamp": datetime.now().timestamp(),
+                        "relevance_score": relevance_score.overall,
+                        "confidence": relevance_score.confidence,
+                        "reasoning": relevance_score.reasoning,
+                        "position_3d": list(memory.position_3d)
+                    }
+                    
+                    # Broadcast to all connections (including this one)
+                    await websocket_manager.broadcast_memory_access(access_event)
+                    
+                    # Update memory access count
+                    memory.update_access()
+                    
+                    # Small delay for visualization effect
+                    await asyncio.sleep(0.3)
+                
+                # Generate AI response
+                ai_response = await _generate_ai_response_with_context(
+                    message_content, selected_memories, final_relevance_scores
+                )
+                
+                # Evaluate response quality and record co-access feedback
+                response_quality = await _evaluate_response_quality(
+                    query=message_content,
+                    memories=selected_memories,
+                    response=ai_response,
+                    claude_client=claude_client
+                )
+                
+                # Record co-access with feedback
+                if len(selected_memories) >= 2:
+                    memory_ids = [memory.id for memory in selected_memories]
+                    relevance_scores_list = [score.overall for score in final_relevance_scores]
+                    
+                    connection_agent.record_co_access_with_feedback(
+                        memory_ids=memory_ids,
+                        query=message_content,
+                        relevance_scores=relevance_scores_list,
+                        response_quality=response_quality,
+                        session_id=session_id
+                    )
+                
+                # Send final response
+                await websocket_manager.send_to_connection(connection_id, {
+                    "type": "response",
+                    "data": {
+                        "content": ai_response,
+                        "memory_count": len(selected_memories),
+                        "processing_time": 0,  # Calculate if needed
+                        "response_quality": response_quality,
+                        "timestamp": datetime.now().timestamp()
+                    }
+                })
+                
+                # Send completion signal
+                await websocket_manager.send_to_connection(connection_id, {
+                    "type": "complete",
+                    "data": {"session_id": session_id}
+                })
+                
+            except Exception as e:
+                logger.error(f"WebSocket message processing error: {e}")
+                await websocket_manager.send_to_connection(connection_id, {
+                    "type": "error",
+                    "data": {"message": f"Failed to process message: {str(e)}"}
+                })
             
     except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected")
+        logger.info(f"WebSocket client disconnected: {connection_id}")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        try:
-            await websocket.send_json({
-                "type": "error",
-                "data": {"message": str(e)}
-            })
-        except:
-            pass
+    finally:
+        websocket_manager.disconnect(connection_id)
 
 @chat_router.get("/history")
 async def get_chat_history(

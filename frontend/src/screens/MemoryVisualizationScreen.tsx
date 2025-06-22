@@ -20,14 +20,35 @@ export const MemoryVisualizationScreen: React.FC = () => {
     selectNode,
     generateMockData,
     simulateMemoryAccess,
+    loadMemoryNodes,
+    loading,
+    error,
+    isUsingBackend,
+    initialized,
   } = useMemoryStore();
 
-  // Generate mock data on component mount
+  // Load memory data on component mount
   useEffect(() => {
-    if (Object.keys(nodes).length === 0) {
-      generateMockData();
-    }
-  }, [generateMockData, nodes]);
+    const initializeMemoryData = async () => {
+      const nodeCount = Object.keys(nodes).length;
+      console.log(`🔄 MemoryViz: Initialized: ${initialized}, Node count: ${nodeCount}, Loading: ${loading}`);
+      
+      // Only initialize if not already initialized and not currently loading
+      if (!initialized && !loading) {
+        console.log('🔄 MemoryViz: Initializing memory data...');
+        
+        // Try to load from backend first
+        const backendSuccess = await loadMemoryNodes();
+        
+        if (!backendSuccess) {
+          console.log('📦 MemoryViz: Backend unavailable, using mock data');
+          generateMockData();
+        }
+      }
+    };
+    
+    initializeMemoryData();
+  }, []); // Remove dependencies to prevent infinite loop
 
   // Calculate static graph size (no resize when details panel opens)
   useEffect(() => {
