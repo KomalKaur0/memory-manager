@@ -1,0 +1,219 @@
+"""
+Configuration Module for AI Memory System
+
+Provides centralized configuration management including:
+- Environment-based settings
+- Database configurations
+- Runtime parameters
+"""
+
+import yaml
+from pathlib import Path
+from typing import Dict, Any, Optional
+import os
+from .settings import (
+    Settings,
+    Environment,
+    get_settings,
+    reset_settings,
+    load_settings_from_file,
+    get_environment_settings,
+    DEVELOPMENT_OVERRIDES,
+    PRODUCTION_OVERRIDES,
+    TESTING_OVERRIDES
+)
+
+__all__ = [
+    # From settings
+    "Settings",
+    "Environment",
+    "get_settings",
+    "reset_settings",
+    "load_settings_from_file",
+    "get_environment_settings",
+    
+    # Database config
+    "load_database_config",
+    "get_database_config",
+    
+    # Utilities
+    "get_config_path",
+    "validate_config"
+]
+
+# Config directory path
+CONFIG_DIR = Path(__file__).parent
+
+
+def load_database_config(
+    config_file: str = "database_config.yaml",
+    environment: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Load database configuration from YAML file.
+    
+    Args:
+        config_file: Name of the configuration file
+        environment: Environment to load (defaults to current setting)
+        
+    Returns:
+        Database configuration dict
+    """
+    config_path = CONFIG_DIR / config_file
+    
+    if not config_path.exists():
+        raise FileNotFoundError(f"Database config file not found: {config_path}")
+    
+    with open(config_path, 'r') as f:
+        full_config = yaml.safe_load(f)
+    
+    # Get environment
+    if environment is None:
+        settings = get_settings()
+        environment = settings.environment.value
+    
+    if environment not in full_config:
+        raise ValueError(f"Environment '{environment}' not found in database config")
+    
+    # Get environment-specific config
+    env_config = full_config[environment]
+    
+    # Substitute environment variables
+    env_config = _substitute_env_vars(env_config)
+    
+    # Add common configurations
+    if 'query_optimization' in full_config:
+        env_config['query_optimization'] = full_config['query_optimization']
+    
+    if 'maintenance' in full_config:
+        env_config['maintenance'] = full_config['maintenance']
+    
+    if 'monitoring' in full_config:
+        env_config['monitoring'] = full_config['monitoring']
+    
+    return env_config
+
+
+def _substitute_env_vars(config: Any) -> Any:
+    """
+    Recursively substitute environment variables in config.
+    
+    Variables should be in format: ${VAR_NAME} or ${VAR_NAME:default_value}
+    """
+    if isinstance(config, dict):
+        return {k: _substitute_env_vars(v) for k, v in config.items()}
+    elif isinstance(config, list):
+        return [_substitute_env_vars(item) for item in config]
+    elif isinstance(config, str) and config.startswith('${') and config.endswith('}'):
+        # Extract variable name and default value
+        var_content = config[2:-1]
+        if ':' in var_content:
+            var_name, default_value = var_content.split(':', 1)
+        else:
+            var_name, default_value = var_content, None
+        
+        # Get from environment or use default
+        value = os.environ.get(var_name, default_value)
+        if value is None:
+            raise ValueError(f"Environment variable {var_name} not set and no default provided")
+        
+        return value
+    else:
+        return config
+
+
+def get_database_config(
+    database: str = "neo4j",
+    environment: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get specific database configuration.
+    
+    Args:
+        database: Database name ('neo4j' or 'weaviate')
+        environment: Environment to use
+        
+    Returns:
+        Database-specific configuration
+    """
+    config = load_database_config(environment=environment)
+    
+    if database not in config:
+        raise ValueError(f"Database '{database}' not found in configuration")
+    
+    return config[database]
+
+
+def get_config_path(filename: str) -> Path:
+    """
+    Get full path to a config file.
+    
+    Args:
+        filename: Name of the config file
+        
+    Returns:
+        Full path to the file
+    """
+    return CONFIG_DIR / filename
+
+
+def validate_config(config: Dict[str, Any]) -> bool:
+    """
+    Validate configuration structure and values.
+    
+    Args:
+        config: Configuration dictionary to validate
+        
+    Returns:
+        True if valid
+        
+    Raises:
+        ValueError: If configuration is invalid
+    """
+    # Validate Neo4j config
+    if 'neo4j' in config:
+        neo4j = config['neo4j']
+        required = ['uri', 'username', 'password']
+        for field in required:
+            if field not in neo4j:
+                raise ValueError(f"Missing required Neo4j field: {field}")
+        
+        if not neo4j['uri'].startswith(('bolt://', 'neo4j://')):
+            raise ValueError(f"Invalid Neo4j URI: {neo4j['uri']}")
+    
+    # Validate Weaviate config
+    if 'weaviate' in config:
+        weaviate = config['weaviate']
+        if 'url' not in weaviate:
+            raise ValueError("Missing required Weaviate field: url")
+        
+        if not weaviate['url'].startswith(('http://', 'https://')):
+            raise ValueError(f"Invalid Weaviate URL: {weaviate['url']}")
+    
+    return True
+
+
+# Convenience function for quick setup
+def get_full_config(environment: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get complete configuration including settings and database config.
+    
+    Args:
+        environment: Environment to use
+        
+    Returns:
+        Combined configuration dictionary
+    """
+    settings = get_environment_settings(
+        Environment(environment) if environment else None
+    )
+    
+    try:
+        db_config = load_database_config(environment=environment)
+    except FileNotFoundError:
+        db_config = {}
+    
+    return {
+        'settings': settings.model_dump(),
+        'databases': db_config
+    }

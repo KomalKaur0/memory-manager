@@ -6,3 +6,15 @@ pydantic
 pytest
 python-dotenv
 anthropic
+typing
+enum
+uuid
+math
+contextlib
+logging
+weaviate
+json
+csv
+pathlib
+dataclasses
+pydantic_settings
