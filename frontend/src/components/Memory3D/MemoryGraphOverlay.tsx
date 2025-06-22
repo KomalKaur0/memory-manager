@@ -141,7 +141,8 @@ export const MemoryGraphOverlay: React.FC<MemoryGraphOverlayProps> = ({
     
     Object.entries(nodes).forEach(([nodeId, node]) => {
       let clusterKey = 'conversation';
-      for (const tag of node.tags) {
+      const tags = node.tags || [];
+      for (const tag of tags) {
         if (clusters[tag]) {
           clusterKey = tag;
           break;
@@ -363,7 +364,8 @@ export const MemoryGraphOverlay: React.FC<MemoryGraphOverlayProps> = ({
   // Calculate overlay node size - larger for better visibility
   const getOverlayNodeSize = (node: MemoryNode, scale: number) => {
     const baseSize = 35; // Increased from 20
-    const importanceBonus = Math.log(node.access_count + 1) * 4;
+    const accessCount = node.access_count || 0;
+    const importanceBonus = Math.log(accessCount + 1) * 4;
     return Math.max(25, Math.min(60, (baseSize + importanceBonus) * scale));
   };
 
@@ -436,7 +438,7 @@ export const MemoryGraphOverlay: React.FC<MemoryGraphOverlayProps> = ({
       const startScreen = project3DToScreen(startPos);
       if (!startScreen) return;
       
-      Object.entries(node.connections).forEach(([targetId, connection]) => {
+      Object.entries(node.connections || {}).forEach(([targetId, connection]) => {
         const connectionId = nodeId < targetId ? `${nodeId}-${targetId}` : `${targetId}-${nodeId}`;
         if (processed.has(connectionId)) return;
         processed.add(connectionId);
@@ -450,7 +452,7 @@ export const MemoryGraphOverlay: React.FC<MemoryGraphOverlayProps> = ({
         const isVisible = startScreen.isVisible || endScreen.isVisible;
         if (!isVisible) return;
         
-        const weight = connection.outbound_weight;
+        const weight = connection.outbound_weight || connection.weight || 0.5;
         const color = weight > 0.7 ? '#00BFFF' :
                      weight > 0.5 ? '#4169E1' :
                      weight > 0.3 ? '#6495ED' : '#483D8B';
