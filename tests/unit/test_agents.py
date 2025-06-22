@@ -45,7 +45,7 @@ class TestRelevanceAgent:
         )
         
         assert isinstance(score, RelevanceScore)
-        assert score.overall >= 0.5  # Moderate to high relevance expected
+        assert score.overall >= 0.4  # Moderate relevance expected (adjusted for new dimensions)
         assert score.confidence >= 0.7
         assert "semantic" in score.reasoning.lower()  # Should mention semantic matching
         assert score.semantic_score >= 0.6
@@ -86,7 +86,7 @@ class TestRelevanceAgent:
         
         # Should have high context relevance due to conversation history
         assert score.context_score >= 0.7
-        assert score.overall >= 0.3  # Overall may be lower due to poor semantic match
+        assert score.overall >= 0.2  # Overall may be lower due to poor semantic match and new dimensions
     
     def test_evaluate_relevance_temporal_factor(self, relevance_agent, sample_memory, sample_query_context):
         """Test that temporal factors affect relevance"""
@@ -102,6 +102,58 @@ class TestRelevanceAgent:
         
         assert score.temporal_score >= 0.3  # Access count should boost temporal score
     
+    def test_connection_strength_relevance(self, sample_memory, sample_query_context):
+        """Test that connection strength influences relevance scoring"""
+        from src.core.memory_graph import MemoryGraph
+        
+        # Create a memory graph and add the sample memory
+        memory_graph = MemoryGraph()
+        memory_id = memory_graph.add_node(sample_memory)
+        
+        # Create a relevance agent with the memory graph
+        relevance_agent = RelevanceAgent(memory_graph=memory_graph)
+        
+        # Create another memory and establish a connection
+        reference_memory = MemoryNode(
+            concept="Python coroutines explained",
+            summary="Deep dive into Python coroutines",
+            full_content="Detailed explanation of how coroutines work in Python asyncio",
+            tags=["python", "coroutines", "async"],
+            keywords=["coroutines", "asyncio", "python"]
+        )
+        ref_memory_id = memory_graph.add_node(reference_memory)
+        
+        # Create a strong connection between memories
+        from src.core.memory_node import ConnectionType
+        memory_graph.create_connection(memory_id, ref_memory_id, ConnectionType.SIMILARITY, 0.8)
+        
+        # Record some connection modifications to increase learning
+        relevance_agent.record_connection_modification()
+        relevance_agent.record_connection_modification()
+        relevance_agent.record_connection_modification()
+        
+        # Evaluate relevance with reference to connected memory
+        score = relevance_agent.evaluate_relevance(
+            memory=sample_memory,
+            query="How to use async/await in Python?",
+            context=sample_query_context,
+            reference_memory_ids=[ref_memory_id]
+        )
+        
+        # Should have high connection strength score due to strong connection
+        assert score.connection_strength_score >= 0.5
+        assert relevance_agent.connection_strength_weight > 0  # Weight should have increased
+        
+        # Overall score should be higher due to connection strength
+        score_without_connections = relevance_agent.evaluate_relevance(
+            memory=sample_memory,
+            query="How to use async/await in Python?",
+            context=sample_query_context,
+            reference_memory_ids=[]
+        )
+        
+        assert score.overall >= score_without_connections.overall
+    
     def test_relevance_score_components(self, relevance_agent, sample_memory, sample_query_context):
         """Test that all relevance score components are properly calculated"""
         score = relevance_agent.evaluate_relevance(
@@ -115,6 +167,9 @@ class TestRelevanceAgent:
         assert 0.0 <= score.context_score <= 1.0
         assert 0.0 <= score.temporal_score <= 1.0
         assert 0.0 <= score.topical_score <= 1.0
+        assert 0.0 <= score.functional_score <= 1.0
+        assert 0.0 <= score.associative_score <= 1.0
+        assert 0.0 <= score.connection_strength_score <= 1.0
         assert 0.0 <= score.overall <= 1.0
         assert 0.0 <= score.confidence <= 1.0
         assert isinstance(score.reasoning, str)
@@ -167,13 +222,17 @@ class TestFilterAgent:
         """Sample relevance scores matching the memories"""
         return [
             RelevanceScore(overall=0.9, confidence=0.8, semantic_score=0.9, context_score=0.8, 
-                         temporal_score=0.7, topical_score=0.9, reasoning="High match"),
+                         temporal_score=0.7, topical_score=0.9, functional_score=0.8, 
+                         associative_score=0.7, connection_strength_score=0.0, reasoning="High match"),
             RelevanceScore(overall=0.85, confidence=0.8, semantic_score=0.8, context_score=0.9, 
-                         temporal_score=0.6, topical_score=0.8, reasoning="Very relevant"),
+                         temporal_score=0.6, topical_score=0.8, functional_score=0.7,
+                         associative_score=0.6, connection_strength_score=0.0, reasoning="Very relevant"),
             RelevanceScore(overall=0.4, confidence=0.6, semantic_score=0.3, context_score=0.5, 
-                         temporal_score=0.4, topical_score=0.3, reasoning="Different language"),
+                         temporal_score=0.4, topical_score=0.3, functional_score=0.2,
+                         associative_score=0.3, connection_strength_score=0.0, reasoning="Different language"),
             RelevanceScore(overall=0.2, confidence=0.7, semantic_score=0.1, context_score=0.2, 
-                         temporal_score=0.3, topical_score=0.1, reasoning="Unrelated topic")
+                         temporal_score=0.3, topical_score=0.1, functional_score=0.1,
+                         associative_score=0.1, connection_strength_score=0.0, reasoning="Unrelated topic")
         ]
     
     @pytest.fixture
@@ -237,9 +296,11 @@ class TestFilterAgent:
         # Both have high relevance
         high_scores = [
             RelevanceScore(overall=0.9, confidence=0.8, semantic_score=0.9, context_score=0.8, 
-                         temporal_score=0.7, topical_score=0.9, reasoning="High match 1"),
+                         temporal_score=0.7, topical_score=0.9, functional_score=0.8,
+                         associative_score=0.7, connection_strength_score=0.0, reasoning="High match 1"),
             RelevanceScore(overall=0.88, confidence=0.8, semantic_score=0.88, context_score=0.8, 
-                         temporal_score=0.7, topical_score=0.88, reasoning="High match 2")
+                         temporal_score=0.7, topical_score=0.88, functional_score=0.8,
+                         associative_score=0.7, connection_strength_score=0.0, reasoning="High match 2")
         ]
         
         result = filter_agent.filter_for_response(

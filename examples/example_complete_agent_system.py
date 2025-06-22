@@ -20,7 +20,7 @@ def demonstrate_complete_agent_system():
     
     # Initialize the memory graph and agents
     memory_graph = MemoryGraph()
-    relevance_agent = RelevanceAgent()
+    relevance_agent = RelevanceAgent(memory_graph=memory_graph)  # Pass memory graph for connection strength analysis
     filter_agent = FilterAgent()
     connection_agent = ConnectionAgent(memory_graph)
     
@@ -144,6 +144,13 @@ def demonstrate_complete_agent_system():
         connection_suggestions, min_confidence=0.7
     )
     print(f"Applied connections: {applied_counts}")
+    
+    # Record connection modifications in relevance agent for learning
+    for _ in range(sum(applied_counts.values())):
+        relevance_agent.record_connection_modification()
+    
+    print(f"RelevanceAgent connection learning status: {relevance_agent.connection_modification_count} modifications recorded")
+    print(f"Connection strength weight: {relevance_agent.connection_strength_weight:.1%}")
     print()
     
     # Step 4: User queries memory system
@@ -171,8 +178,13 @@ def demonstrate_complete_agent_system():
     all_memories = list(memory_graph.nodes.values())
     relevance_scores = []
     
+    # Get recently accessed memory IDs for connection strength analysis
+    recent_memory_ids = [event.memory_id for event in access_events[-3:]]  # Last 3 accessed memories
+    
     for memory in all_memories:
-        score = relevance_agent.evaluate_relevance(memory, query, context)
+        score = relevance_agent.evaluate_relevance(
+            memory, query, context, reference_memory_ids=recent_memory_ids
+        )
         relevance_scores.append(score)
     
     # Sort by relevance
@@ -182,8 +194,10 @@ def demonstrate_complete_agent_system():
     print("Relevance evaluation results:")
     for memory, score in memory_score_pairs:
         must_keep_flag = " 🔒" if score.must_keep else ""
-        print(f"  {memory.concept[:40]}{must_keep_flag}")
+        connection_strength_flag = " 🔗" if score.connection_strength_score > 0.1 else ""
+        print(f"  {memory.concept[:40]}{must_keep_flag}{connection_strength_flag}")
         print(f"    Overall: {score.overall:.3f}, Semantic: {score.semantic_score:.3f}, Context: {score.context_score:.3f}")
+        print(f"    Connection Strength: {score.connection_strength_score:.3f}, Functional: {score.functional_score:.3f}, Associative: {score.associative_score:.3f}")
         print(f"    Reasoning: {score.reasoning}")
         print()
     

@@ -50,6 +50,9 @@ class AccessEvent:
     session_id: str = "default"
     result_rank: int = 0
     interaction_type: str = "search"  # 'search', 'browse', 'related'
+    relevance_score: Optional[float] = None  # How relevant this memory was for the query
+    was_helpful: Optional[bool] = None  # Whether this memory was deemed helpful
+    response_quality: Optional[float] = None  # Quality of response when this memory was used
 
 
 @dataclass
@@ -158,6 +161,155 @@ class ConnectionAgent:
             if recent_event.memory_id != event.memory_id:
                 pair = tuple(sorted([event.memory_id, recent_event.memory_id]))
                 self.co_access_patterns[pair] += 1
+    
+    def record_co_access_with_feedback(
+        self, 
+        memory_ids: List[str], 
+        query: str,
+        relevance_scores: Optional[List[float]] = None,
+        response_quality: Optional[float] = None,
+        session_id: str = "default"
+    ):
+        """
+        Record co-access of memories with feedback on their mutual relevance and helpfulness.
+        
+        This is the core method for creating non-semantic, usage-based connections.
+        When multiple memories are accessed together and prove mutually helpful,
+        this strengthens connections between them significantly.
+        
+        Args:
+            memory_ids: List of memories accessed together
+            query: The query or conversation context
+            relevance_scores: How relevant each memory was (0.0-1.0)
+            response_quality: Overall quality of response using these memories
+            session_id: Session identifier
+        """
+        timestamp = datetime.now()
+        
+        # Record individual access events with feedback
+        for i, memory_id in enumerate(memory_ids):
+            relevance_score = relevance_scores[i] if relevance_scores and i < len(relevance_scores) else None
+            was_helpful = relevance_score is not None and relevance_score >= 0.5
+            
+            event = AccessEvent(
+                memory_id=memory_id,
+                query=query,
+                timestamp=timestamp,
+                session_id=session_id,
+                result_rank=i,
+                relevance_score=relevance_score,
+                was_helpful=was_helpful,
+                response_quality=response_quality
+            )
+            
+            self.record_access_event(event)
+        
+        # Create strong connections between co-accessed helpful memories
+        if len(memory_ids) >= 2:
+            self._create_co_access_connections(memory_ids, relevance_scores, response_quality, query)
+    
+    def _create_co_access_connections(
+        self, 
+        memory_ids: List[str], 
+        relevance_scores: Optional[List[float]],
+        response_quality: Optional[float],
+        query: str
+    ):
+        """
+        Create strong connections between memories that were accessed together and proved helpful.
+        
+        This method implements the core feature of creating non-semantic connections
+        based on actual usage patterns and mutual helpfulness.
+        """
+        helpful_memories = []
+        
+        # Identify which memories were actually helpful
+        for i, memory_id in enumerate(memory_ids):
+            relevance_score = relevance_scores[i] if relevance_scores and i < len(relevance_scores) else 0.5
+            
+            # Consider memory helpful if it has good relevance score
+            if relevance_score >= 0.4:  # Lower threshold than individual helpfulness
+                helpful_memories.append((memory_id, relevance_score))
+        
+        # Create connections between all pairs of helpful memories
+        for i, (source_id, source_relevance) in enumerate(helpful_memories):
+            for j, (target_id, target_relevance) in enumerate(helpful_memories):
+                if i >= j:  # Avoid duplicates and self-connections
+                    continue
+                
+                # Calculate connection strength based on multiple factors
+                base_strength = min(source_relevance, target_relevance)  # Limited by weaker memory
+                
+                # Boost for high response quality
+                quality_boost = 0.0
+                if response_quality is not None:
+                    quality_boost = max(0.0, (response_quality - 0.5) * 0.4)  # Up to 0.2 boost
+                
+                # Boost for multiple co-accesses
+                pair = tuple(sorted([source_id, target_id]))
+                co_access_count = self.co_access_patterns.get(pair, 0)
+                frequency_boost = min(0.3, co_access_count * 0.05)  # Up to 0.3 boost
+                
+                # Boost for memories that complement each other (different ranks)
+                rank_diff = abs(i - j)
+                complement_boost = min(0.2, rank_diff * 0.1)  # Up to 0.2 boost
+                
+                final_strength = min(0.95, base_strength + quality_boost + frequency_boost + complement_boost)
+                
+                # Only create strong connections (minimum 0.3)
+                if final_strength >= 0.3:
+                    self._ensure_bidirectional_connection(
+                        source_id, target_id, final_strength, 
+                        f"Co-accessed with mutual helpfulness (query: {query[:50]}...)"
+                    )
+    
+    def _ensure_bidirectional_connection(
+        self, 
+        memory_id1: str, 
+        memory_id2: str, 
+        strength: float, 
+        reasoning: str
+    ):
+        """
+        Ensure a bidirectional connection exists between two memories.
+        
+        If connection already exists, strengthen it. If not, create it.
+        This implements the "very strongly create connections" requirement.
+        """
+        from src.core.memory_node import ConnectionType
+        
+        memory1 = self.memory_graph.get_node(memory_id1)
+        memory2 = self.memory_graph.get_node(memory_id2)
+        
+        if not memory1 or not memory2:
+            return
+        
+        # Connection from memory1 to memory2
+        if memory_id2 in memory1.connections:
+            # Existing connection - strengthen it
+            current_weight = memory1.connections[memory_id2].weight
+            # Take the maximum of current and new weight, with a boost for reinforcement
+            new_weight = min(0.95, max(current_weight, strength) + 0.1)
+            memory1.connections[memory_id2].weight = new_weight
+            print(f"Strengthened connection {memory1.concept[:20]}... → {memory2.concept[:20]}... from {current_weight:.3f} to {new_weight:.3f}")
+        else:
+            # New connection - create it
+            self.memory_graph.create_connection(
+                memory_id1, memory_id2, ConnectionType.CO_ACCESS, strength
+            )
+            print(f"Created new co-access connection {memory1.concept[:20]}... → {memory2.concept[:20]}... (strength: {strength:.3f})")
+        
+        # Connection from memory2 to memory1 (bidirectional)
+        if memory_id1 in memory2.connections:
+            # Existing connection - strengthen it
+            current_weight = memory2.connections[memory_id1].weight
+            new_weight = min(0.95, max(current_weight, strength) + 0.1)
+            memory2.connections[memory_id1].weight = new_weight
+        else:
+            # New connection - create it
+            self.memory_graph.create_connection(
+                memory_id2, memory_id1, ConnectionType.CO_ACCESS, strength
+            )
     
     def suggest_connection_strengthening(
         self, 
