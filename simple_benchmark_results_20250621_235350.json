@@ -1,0 +1,68 @@
+{
+  "timestamp": "2025-06-21T23:53:50.519911",
+  "overall_metrics": {
+    "total_duration_seconds": 0.0056498050689697266,
+    "average_operations_per_second": 1078220.3724935392,
+    "average_memory_usage_mb": 46.71484375,
+    "average_cpu_usage_percent": 0.0,
+    "average_success_rate": 1.0,
+    "total_errors": 0
+  },
+  "best_performer": {
+    "test_name": "Search Operations",
+    "operations_per_second": 2486741.5019762847,
+    "success_rate": 1.0
+  },
+  "worst_performer": {
+    "test_name": "Memory Creation",
+    "operations_per_second": 235476.30810689423,
+    "success_rate": 1.0
+  },
+  "detailed_results": [
+    {
+      "test_name": "Memory Creation",
+      "duration": 0.0021233558654785156,
+      "operations_per_second": 235476.30810689423,
+      "memory_usage_mb": 46.5,
+      "cpu_usage_percent": 0.0,
+      "success_rate": 1.0,
+      "error_count": 0,
+      "metadata": {
+        "total_operations": 500
+      }
+    },
+    {
+      "test_name": "Graph Operations",
+      "duration": 0.002923250198364258,
+      "operations_per_second": 512443.307397439,
+      "memory_usage_mb": 46.7578125,
+      "cpu_usage_percent": 0.0,
+      "success_rate": 1.0,
+      "error_count": 0,
+      "metadata": {
+        "total_operations": 1498,
+        "node_retrievals": 499,
+        "connections_created": 499,
+        "connections_strengthened": 499
+      }
+    },
+    {
+      "test_name": "Search Operations",
+      "duration": 0.0006031990051269531,
+      "operations_per_second": 2486741.5019762847,
+      "memory_usage_mb": 46.88671875,
+      "cpu_usage_percent": 0.0,
+      "success_rate": 1.0,
+      "error_count": 0,
+      "metadata": {
+        "total_operations": 1500,
+        "concept_searches": 500,
+        "keyword_searches": 500,
+        "tag_searches": 500
+      }
+    }
+  ],
+  "recommendations": [
+    "All benchmarks passed performance thresholds - system performing well"
+  ]
+}

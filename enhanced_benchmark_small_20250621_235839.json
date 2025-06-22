@@ -1,0 +1,91 @@
+{
+  "timestamp": "2025-06-21T23:58:39.254483",
+  "configuration": {
+    "num_memories": 100,
+    "num_operations": 50,
+    "memory_content_length": 100,
+    "num_topics": 15,
+    "num_concepts": 20,
+    "connection_probability": 0.3,
+    "min_ops_per_sec": 100,
+    "min_success_rate": 0.95,
+    "max_memory_usage_mb": 500,
+    "search_terms": [
+      "python",
+      "machine",
+      "data",
+      "web",
+      "database",
+      "cloud",
+      "devops",
+      "security",
+      "ai",
+      "ml"
+    ],
+    "max_connection_depth": 3,
+    "similarity_threshold": 0.5,
+    "save_results": true,
+    "output_format": "json",
+    "verbose_logging": false,
+    "name": "small"
+  },
+  "overall_metrics": {
+    "total_duration_seconds": 0.0009243488311767578,
+    "average_operations_per_second": 734457.63292308,
+    "average_memory_usage_mb": 44.5,
+    "average_cpu_usage_percent": 0.0,
+    "average_success_rate": 1.0,
+    "total_errors": 0
+  },
+  "best_performer": {
+    "test_name": "Search Operations",
+    "operations_per_second": 1673259.574468085,
+    "success_rate": 1.0
+  },
+  "worst_performer": {
+    "test_name": "Memory Creation",
+    "operations_per_second": 102300.09756097561,
+    "success_rate": 1.0
+  },
+  "detailed_results": [
+    {
+      "test_name": "Memory Creation",
+      "duration": 0.0004887580871582031,
+      "operations_per_second": 102300.09756097561,
+      "memory_usage_mb": 44.5,
+      "cpu_usage_percent": 0.0,
+      "success_rate": 1.0,
+      "error_count": 0,
+      "metadata": {
+        "total_operations": 50
+      }
+    },
+    {
+      "test_name": "Graph Operations",
+      "duration": 0.0003459453582763672,
+      "operations_per_second": 427813.2267401792,
+      "memory_usage_mb": 44.5,
+      "cpu_usage_percent": 0.0,
+      "success_rate": 1.0,
+      "error_count": 0,
+      "metadata": {
+        "total_operations": 148
+      }
+    },
+    {
+      "test_name": "Search Operations",
+      "duration": 8.96453857421875e-05,
+      "operations_per_second": 1673259.574468085,
+      "memory_usage_mb": 44.5,
+      "cpu_usage_percent": 0.0,
+      "success_rate": 1.0,
+      "error_count": 0,
+      "metadata": {
+        "total_operations": 150
+      }
+    }
+  ],
+  "recommendations": [
+    "All benchmarks passed performance thresholds - system performing well"
+  ]
+}
