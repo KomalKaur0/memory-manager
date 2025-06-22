@@ -4,3 +4,15 @@ fastapi
 sentence-transformers
 pydantic
 pytest
+typing
+enum
+uuid
+math
+contextlib
+logging
+weaviate
+json
+csv
+pathlib
+dataclasses
+pydantic_settings
