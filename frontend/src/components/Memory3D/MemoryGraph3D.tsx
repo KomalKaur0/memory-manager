@@ -698,12 +698,41 @@ export const MemoryGraph3D: React.FC<MemoryGraph3DProps> = ({
         const baseGlowIntensity = Math.max(0.2, weight);
         const boostedGlow = hasRecentAccess ? Math.min(1, baseGlowIntensity * 1.5) : baseGlowIntensity;
 
+        // Calculate node sizes to clip lines at node edges
+        const startNode = nodes[nodeId];
+        const endNode = nodes[targetId];
+        const startNodeSize = startNode ? getNodeSize(startNode, startScreen.scale) : 20;
+        const endNodeSize = endNode ? getNodeSize(endNode, endScreen.scale) : 20;
+        
+        // Calculate direction vector
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Skip if nodes are too close
+        if (distance < (startNodeSize + endNodeSize) / 2) {
+          return;
+        }
+        
+        // Normalize direction vector
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+        
+        // Calculate clipped line endpoints (stop at node edges)
+        const startRadius = startNodeSize / 2;
+        const endRadius = endNodeSize / 2;
+        
+        const clippedX1 = x1 + dirX * startRadius;
+        const clippedY1 = y1 + dirY * startRadius;
+        const clippedX2 = x2 - dirX * endRadius;
+        const clippedY2 = y2 - dirY * endRadius;
+
         connections.push({
           id: connectionId,
-          x1,
-          y1,
-          x2,
-          y2,
+          x1: clippedX1,
+          y1: clippedY1,
+          x2: clippedX2,
+          y2: clippedY2,
           weight,
           color,
           depth: (startScreen.depth + endScreen.depth) / 2,

@@ -432,12 +432,41 @@ export const MemoryGraphOverlay: React.FC<MemoryGraphOverlayProps> = ({
         const baseGlowIntensity = Math.max(0.2, weight);
         const boostedGlow = hasRecentAccess ? Math.min(1, baseGlowIntensity * 1.5) : baseGlowIntensity;
         
+        // Calculate node sizes for line clipping
+        const startNode = nodes[nodeId];
+        const endNode = nodes[targetId];
+        const startNodeSize = startNode ? getOverlayNodeSize(startNode, startScreen.scale) : 25;
+        const endNodeSize = endNode ? getOverlayNodeSize(endNode, endScreen.scale) : 25;
+        
+        // Calculate direction vector for clipping
+        const dx = endScreen.x - startScreen.x;
+        const dy = endScreen.y - startScreen.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Skip if nodes are too close
+        if (distance < (startNodeSize + endNodeSize) / 2) {
+          return;
+        }
+        
+        // Normalize direction vector
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+        
+        // Calculate clipped line endpoints
+        const startRadius = startNodeSize / 2;
+        const endRadius = endNodeSize / 2;
+        
+        const clippedX1 = startScreen.x + dirX * startRadius;
+        const clippedY1 = startScreen.y + dirY * startRadius;
+        const clippedX2 = endScreen.x - dirX * endRadius;
+        const clippedY2 = endScreen.y - dirY * endRadius;
+        
         connections.push({
           id: connectionId,
-          x1: startScreen.x,
-          y1: startScreen.y,
-          x2: endScreen.x,
-          y2: endScreen.y,
+          x1: clippedX1,
+          y1: clippedY1,
+          x2: clippedX2,
+          y2: clippedY2,
           weight,
           color,
           glowIntensity: boostedGlow,
