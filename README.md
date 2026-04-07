@@ -28,8 +28,8 @@ where the edge weight depends on the usage and relevance to the current node.
 Weaviate Vector Store - Enables fast semantic similarity search.
 Hybrid Queries - Combines semantic search with graph traversal for superior results.
 
-- Learning Connection Weights: Edges start at weight = 0 and strengthen through usage (neural-like plasticity). Connection types between nodes are causation, temporal sequence, similarity, contrast, generalization. Usage patterns influence future retrieval relevance.
-
+- Learning Connection Weights: Edges start at weight = 0 and strengthen through usage (neural-like plasticity). Connection types between nodes are causation, temporal sequence, similarity, contrast, generalization. Edge weights are based purely on access frequency and relative recency — measured by system activity, not wall-clock time — so frequently co-accessed memories develop stronger connections over time.
+- 
 **What it all does**
 Connection-Aware Retrieval:
 
